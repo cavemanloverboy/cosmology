@@ -1,8 +1,12 @@
 [package]
 name = "cosmology"
+author = "cavemanloverboy"
 version = "0.1.0"
 edition = "2021"
-description = "An early-in-development crate aiming to contain a lot of utility functions for cosmology."
+license = "MIT"
+keywords = ["cosmology", "physics", "astrophysics", "universe", "structure"]
+categories = ["science"]
+description = "An early-in-development crate aiming to provide a lot of utilities commonly used in cosmology."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
