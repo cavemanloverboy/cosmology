@@ -1,13 +1,7 @@
-
-
-
-
-
 #[test]
 fn test_matter_only() {
+    use cosmology::scale_factor::{CosmologicalParameters, ScaleFactor, LITTLE_H_TO_BIG_H};
 
-    use cosmology::scale_factor::{ScaleFactor, CosmologicalParameters, LITTLE_H_TO_BIG_H};
-    
     // Specify cosmological parameters
     let params = CosmologicalParameters {
         omega_m0: 1.0,
@@ -28,10 +22,8 @@ fn test_matter_only() {
     // Expectation (analytic solution of the Friedmann equation)
     // For a matter dominated universe, this is a(t) = (t / (2/3/H0))^(2/3)
     let hubble = 0.7 * LITTLE_H_TO_BIG_H;
-    let age_of_universe = 2.0/3.0/hubble;
-    let expected = |t:f64| {
-        (t / age_of_universe).powf(2.0/3.0)
-    };
+    let age_of_universe = 2.0 / 3.0 / hubble;
+    let expected = |t: f64| (t / age_of_universe).powf(2.0 / 3.0);
 
     // Initialize ScaleFactor
     let mut scale_factor = ScaleFactor::new(
@@ -39,7 +31,7 @@ fn test_matter_only() {
         z0,
         max_dloga,
         // Obtained via inverting the expected relationship
-        Some(age_of_universe * a0.powf(3.0/2.0)), 
+        Some(age_of_universe * a0.powf(3.0 / 2.0)),
     );
 
     // Initialize vectors which collect values
@@ -50,7 +42,6 @@ fn test_matter_only() {
     let mut a_expected = vec![scale_factor.get_a()];
 
     while a.last().unwrap() < &1.0 {
-        
         // Evolve scale factor
         scale_factor.step_forward(dt);
 
@@ -63,13 +54,67 @@ fn test_matter_only() {
         a_expected.push(expected(*t.last().unwrap()));
     }
 
+    {
+        use plotters::prelude::*;
+
+        let root = BitMapBackend::new("tests/scale-factor-matter-only.png", (640, 480))
+            .into_drawing_area();
+        root.fill(&WHITE).unwrap();
+        let mut chart = ChartBuilder::on(&root)
+            .caption("Dark Matter Only", ("sans-serif", 50).into_font())
+            .margin(5_u32)
+            .x_label_area_size(30_u32)
+            .y_label_area_size(30_u32)
+            .build_cartesian_2d(
+                age_of_universe * a0.powf(3.0 / 2.0)..age_of_universe,
+                0.0_f64..1.0,
+            )
+            .unwrap();
+
+        chart
+            .configure_mesh()
+            .x_desc("Time [Myr]")
+            .y_desc("Scale Factor")
+            .draw()
+            .unwrap();
+
+        chart
+            .draw_series(LineSeries::new(
+                t.iter().zip(&a).map(|(&x, &y)| (x, y)),
+                &RED,
+            ))
+            .unwrap()
+            .label("Calculated")
+            .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+
+        chart
+            .draw_series(
+                t.iter()
+                    .zip(&a)
+                    .step_by(10)
+                    .map(|(&x, &y)| Circle::new((x, y), 1_u32, BLUE.filled())),
+            )
+            .unwrap()
+            .label("Expected")
+            .legend(|(x, y)| Circle::new((x, y), 3_u32, BLUE.filled()));
+
+        chart
+            .configure_series_labels()
+            .position(SeriesLabelPosition::UpperLeft)
+            .background_style(&WHITE.mix(0.8))
+            .border_style(&BLACK)
+            .draw()
+            .unwrap();
+    }
+
     // Calculate the avg of L1 loss between the calculated values and the expected values
-    let avg_diff =  a
+    let avg_diff = a
         .iter()
         .zip(a_expected)
-        .map(|(&actual, expected)| (actual-expected).abs())
-        .sum::<f64>() / a.len() as f64;
-    
+        .map(|(&actual, expected)| (actual - expected).abs())
+        .sum::<f64>()
+        / a.len() as f64;
+
     // If --nocapture, print value
     println!("avg_diff for matter-only universe {avg_diff:.2e}");
 
@@ -81,9 +126,8 @@ fn test_matter_only() {
 
 #[test]
 fn test_radiation_only() {
+    use cosmology::scale_factor::{CosmologicalParameters, ScaleFactor, LITTLE_H_TO_BIG_H};
 
-    use cosmology::scale_factor::{ScaleFactor, CosmologicalParameters, LITTLE_H_TO_BIG_H};
-    
     // Specify cosmological parameters
     let params = CosmologicalParameters {
         omega_m0: 0.0,
@@ -104,10 +148,8 @@ fn test_radiation_only() {
     // Expectation (analytic solution of the Friedmann equation)
     // For a radiation dominated universe, this is a(t) = (t / (1/2/H0))^(1/2)
     let hubble = 0.7 * LITTLE_H_TO_BIG_H;
-    let age_of_universe = 1.0/2.0/hubble;
-    let expected = |t:f64| {
-        (t / age_of_universe).powf(1.0/2.0)
-    };
+    let age_of_universe = 1.0 / 2.0 / hubble;
+    let expected = |t: f64| (t / age_of_universe).powf(1.0 / 2.0);
 
     // Initialize ScaleFactor
     let mut scale_factor = ScaleFactor::new(
@@ -115,7 +157,7 @@ fn test_radiation_only() {
         z0,
         max_dloga,
         // Obtained via inverting the expected relationship
-        Some(age_of_universe * a0.powi(2)), 
+        Some(age_of_universe * a0.powi(2)),
     );
 
     // Initialize vectors which collect values
@@ -126,7 +168,6 @@ fn test_radiation_only() {
     let mut a_expected = vec![scale_factor.get_a()];
 
     while a.last().unwrap() < &1.0 {
-        
         // Evolve scale factor
         scale_factor.step_forward(dt);
 
@@ -142,30 +183,41 @@ fn test_radiation_only() {
     {
         use plotters::prelude::*;
 
-        let root = BitMapBackend::new("tests/scale-factor-radiation-only.png", (640, 480)).into_drawing_area();
+        let root = BitMapBackend::new("tests/scale-factor-radiation-only.png", (640, 480))
+            .into_drawing_area();
         root.fill(&WHITE).unwrap();
 
         let mut chart = ChartBuilder::on(&root)
-            .caption("Dark Energy Only", ("sans-serif", 50).into_font())
+            .caption("Radiation Only", ("sans-serif", 50).into_font())
             .margin(5_u32)
             .x_label_area_size(30_u32)
             .y_label_area_size(30_u32)
-            .build_cartesian_2d(0.0..age_of_universe * a0.powi(2), 0.0_f64..1.0).unwrap();
+            .build_cartesian_2d(age_of_universe * a0.powi(2)..age_of_universe, 0.0_f64..1.0)
+            .unwrap();
 
-        chart.configure_mesh().draw().unwrap();
-
+        chart
+            .configure_mesh()
+            .x_desc("Time [Myr]")
+            .y_desc("Scale Factor")
+            .draw()
+            .unwrap();
 
         chart
             .draw_series(LineSeries::new(
                 t.iter().zip(&a).map(|(&x, &y)| (x, y)),
                 &RED,
-            )).unwrap()
+            ))
+            .unwrap()
             .label("Calculated")
             .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
 
         chart
             .draw_series(
-                t.iter().zip(&a).step_by(10).map(|(&x, &y)| Circle::new((x, y), 1_u32, BLUE.filled())))
+                t.iter()
+                    .zip(&a)
+                    .step_by(10)
+                    .map(|(&x, &y)| Circle::new((x, y), 1_u32, BLUE.filled())),
+            )
             .unwrap()
             .label("Expected")
             .legend(|(x, y)| Circle::new((x, y), 3_u32, BLUE.filled()));
@@ -175,16 +227,18 @@ fn test_radiation_only() {
             .position(SeriesLabelPosition::UpperLeft)
             .background_style(&WHITE.mix(0.8))
             .border_style(&BLACK)
-            .draw().unwrap();
+            .draw()
+            .unwrap();
     }
 
     // Calculate the avg of L1 loss between the calculated values and the expected values
-    let avg_diff =  a
+    let avg_diff = a
         .iter()
         .zip(a_expected)
-        .map(|(&actual, expected)| (actual-expected).abs())
-        .sum::<f64>() / a.len() as f64;
-    
+        .map(|(&actual, expected)| (actual - expected).abs())
+        .sum::<f64>()
+        / a.len() as f64;
+
     // If --nocapture, print value
     println!("avg_diff for radiation-only universe {avg_diff:.2e}");
 
@@ -196,9 +250,8 @@ fn test_radiation_only() {
 
 #[test]
 fn test_dark_energy_only() {
-    
-    use cosmology::scale_factor::{ScaleFactor, CosmologicalParameters, LITTLE_H_TO_BIG_H};
-    
+    use cosmology::scale_factor::{CosmologicalParameters, ScaleFactor, LITTLE_H_TO_BIG_H};
+
     // Specify cosmological parameters
     let params = CosmologicalParameters {
         omega_m0: 0.0,
@@ -211,7 +264,7 @@ fn test_dark_energy_only() {
 
     // Specify initial redshift
     let z0: f64 = 99.0;
-    let a0: f64 = 1.0  / (1.0 + z0);
+    let a0: f64 = 1.0 / (1.0 + z0);
 
     // Specify max dloga
     let max_dloga = 0.01;
@@ -221,17 +274,10 @@ fn test_dark_energy_only() {
     let hubble = 0.7 * LITTLE_H_TO_BIG_H;
     let hubble_time = 1.0 / hubble;
     let t0 = a0.ln() * hubble_time;
-    let expected = |t:f64| {
-        (t / hubble_time).exp()
-    };
+    let expected = |t: f64| (t / hubble_time).exp();
 
     // Initialize ScaleFactor
-    let mut scale_factor = ScaleFactor::new(
-        params,
-        z0,
-        max_dloga,
-        Some(t0), 
-    );
+    let mut scale_factor = ScaleFactor::new(params, z0, max_dloga, Some(t0));
 
     // Initialize vectors which collect values
     let mut a = vec![scale_factor.get_a()];
@@ -241,7 +287,6 @@ fn test_dark_energy_only() {
     let mut a_expected = vec![scale_factor.get_a()];
 
     while t.last().unwrap() < &0.0 {
-        
         // Evolve scale factor
         scale_factor.step_forward(dt);
 
@@ -254,32 +299,43 @@ fn test_dark_energy_only() {
         a_expected.push(expected(*t.last().unwrap()));
     }
 
-
     {
         use plotters::prelude::*;
 
-        let root = BitMapBackend::new("tests/scale-factor-de-only.png", (640, 480)).into_drawing_area();
+        let root =
+            BitMapBackend::new("tests/scale-factor-de-only.png", (640, 480)).into_drawing_area();
         root.fill(&WHITE).unwrap();
         let mut chart = ChartBuilder::on(&root)
             .caption("Dark Energy Only", ("sans-serif", 50).into_font())
             .margin(5_u32)
             .x_label_area_size(30_u32)
             .y_label_area_size(30_u32)
-            .build_cartesian_2d(t0..0.0, 0.0_f64..1.0).unwrap();
+            .build_cartesian_2d(t0..0.0, 0.0_f64..1.0)
+            .unwrap();
 
-        chart.configure_mesh().draw().unwrap();
+        chart
+            .configure_mesh()
+            .x_desc("Time [Myr]")
+            .y_desc("Scale Factor")
+            .draw()
+            .unwrap();
 
         chart
             .draw_series(LineSeries::new(
                 t.iter().zip(&a).map(|(&x, &y)| (x, y)),
                 &RED,
-            )).unwrap()
+            ))
+            .unwrap()
             .label("Calculated")
             .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
 
         chart
             .draw_series(
-                t.iter().zip(&a).step_by(10).map(|(&x, &y)| Circle::new((x, y), 1_u32, BLUE.filled())))
+                t.iter()
+                    .zip(&a)
+                    .step_by(10)
+                    .map(|(&x, &y)| Circle::new((x, y), 1_u32, BLUE.filled())),
+            )
             .unwrap()
             .label("Expected")
             .legend(|(x, y)| Circle::new((x, y), 3_u32, BLUE.filled()));
@@ -289,17 +345,18 @@ fn test_dark_energy_only() {
             .position(SeriesLabelPosition::UpperLeft)
             .background_style(&WHITE.mix(0.8))
             .border_style(&BLACK)
-            .draw().unwrap();
+            .draw()
+            .unwrap();
     }
 
     // Calculate the avg of L1 loss between the calculated values and the expected values
-    let avg_diff =  a
+    let avg_diff = a
         .iter()
         .zip(a_expected)
-        .map(|(&actual, expected)| (actual-expected).abs())
-        .sum::<f64>() / a.len() as f64;
+        .map(|(&actual, expected)| (actual - expected).abs())
+        .sum::<f64>()
+        / a.len() as f64;
 
-    
     // If --nocapture, print value
     println!("avg_diff for dark energy-only universe {avg_diff:.2e}");
 
