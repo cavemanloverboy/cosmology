@@ -1,7 +1,8 @@
 
 type Time = f64;
 
-/// The user-facing
+/// The primary, user-facing struct containing the state of the scale factor,
+/// cosmological parameters, and the integrator configuration.
 pub struct ScaleFactor {
     /// Flag whether to use the positive or negative root of the Friedmann Eq
     expanding: bool,
