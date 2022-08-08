@@ -87,6 +87,7 @@ impl EisensteinHu {
 
     /// Transfer function. Tested against colossus 
     fn transfer_baryon(&self, k: f64) -> f64 {
+
       // Auxilary values
       let omc = self.omega_matter_0 - self.omega_baryon_0;
       let ombom0 = self.omega_baryon_0 / self.omega_matter_0;
@@ -466,7 +467,6 @@ mod tests {
 
       // Get result at redshift zero
       let result = eisen_hu.power(&ks, 0.0);
-      println!("{result:?}");
 
       // Expected values, from COLOSSUS 
       let expected = vec![
@@ -476,7 +476,6 @@ mod tests {
       ];
 
       for i in 0..result.len() {
-        println!("{i}");
         assert_eq_tol!(result[i], expected[i], 1e-4);
       }
   }
@@ -500,7 +499,6 @@ mod tests {
 
       // Get result at redshift zero
       let result = eisen_hu.power(&ks, 2.0);
-      println!("{result:?}");
 
       // Expected values, from COLOSSUS
       let expected = vec![
@@ -638,147 +636,114 @@ for k in ks:
     });
   });
 
-  eisenstein_baryon_test!(h50, m100, b10, t270);
-  eisenstein_baryon_test!(h60, m100, b10, t270);
-  eisenstein_baryon_test!(h70, m100, b10, t270);
-  eisenstein_baryon_test!(h80, m100, b10, t270);
-  eisenstein_baryon_test!(h90, m100, b10, t270);
+  macro_rules! eisenstein_power(
+    ($z:ident, $h0:ident, $om0:ident, $ob0:ident, $t0:ident) => {
 
-  eisenstein_baryon_test!(h50, m75, b10, t270);
-  eisenstein_baryon_test!(h60, m75, b10, t270);
-  eisenstein_baryon_test!(h70, m75, b10, t270);
-  eisenstein_baryon_test!(h80, m75, b10, t270);
-  eisenstein_baryon_test!(h90, m75, b10, t270);
+      concat_idents::concat_idents!(test_name = test_eisen_power, _, $z, _, $h0, _, $om0, _, $ob0, _, $t0, {
+        #[test]
+        fn test_name() {
 
-  eisenstein_baryon_test!(h50, m50, b10, t270);
-  eisenstein_baryon_test!(h60, m50, b10, t270);
-  eisenstein_baryon_test!(h70, m50, b10, t270);
-  eisenstein_baryon_test!(h80, m50, b10, t270);
-  eisenstein_baryon_test!(h90, m50, b10, t270);
+          let z: u32 = stringify!($z)[1..].parse::<u32>().unwrap();
+          let h: u32 = stringify!($h0)[1..].parse::<u32>().unwrap();
+          let om0: u32 = stringify!($om0)[1..].parse::<u32>().unwrap();
+          let ob0: u32 = stringify!($ob0)[1..].parse::<u32>().unwrap();
+          let t0: u32 = stringify!($t0)[1..].parse::<u32>().unwrap();
+          
+          // Construct EisensteinHu model
+          let eisen_hu = super::EisensteinHu::new(
+            h as f64 / 100.0, // h
+            om0 as f64 / 100.0, // omega_matter_0
+            ob0 as f64 / 100.0, // omega_baryon_0
+            t0 as f64 / 100.0, // temp_cmb_0
+            0.9665, // ns
+            0.8102, // sigma8
+          ).unwrap();
 
-  eisenstein_baryon_test!(h50, m25, b10, t270);
-  eisenstein_baryon_test!(h60, m25, b10, t270);
-  eisenstein_baryon_test!(h70, m25, b10, t270);
-  eisenstein_baryon_test!(h80, m25, b10, t270);
-  eisenstein_baryon_test!(h90, m25, b10, t270);
+          // Pick wavenumbers
+          let ks = [1.0, 10.0, 100.0];
 
-  eisenstein_baryon_test!(h50, m100, b2, t270);
-  eisenstein_baryon_test!(h60, m100, b2, t270);
-  eisenstein_baryon_test!(h70, m100, b2, t270);
-  eisenstein_baryon_test!(h80, m100, b2, t270);
-  eisenstein_baryon_test!(h90, m100, b2, t270);
+          // Get result at redshift zero
+          let result = eisen_hu.power(&ks, 0.0);
 
-  eisenstein_baryon_test!(h50, m75, b2, t270);
-  eisenstein_baryon_test!(h60, m75, b2, t270);
-  eisenstein_baryon_test!(h70, m75, b2, t270);
-  eisenstein_baryon_test!(h80, m75, b2, t270);
-  eisenstein_baryon_test!(h90, m75, b2, t270);
+          // Expected values, from COLOSSUS 
+          let expected = {
+            use pyo3::prelude::*;
+            use pyo3::types::*;
+            Python::with_gil(|py| {
+              
+              // Get ks into python
+              let list = PyList::new(py, &ks);
+              let locals = PyDict::new(py);
+              locals.set_item("ks", list).unwrap();
+        
+              py.run(format!(r#"from colossus.cosmology import cosmology
+import warnings
+warnings.filterwarnings("ignore")
+planck18 = cosmology.setCosmology("planck18")
+params = {{
+    "H0": {0},
+    "Om0": {1},
+    "Ob0": {2},
+    "Tcmb0": {3},
+    "sigma8": planck18.sigma8,
+    "ns": planck18.ns,
+}}
+cosmology.addCosmology("test", params=params)
+cosmo = cosmology.setCosmology("test")
+x = []
+for k in ks:
+  x.append(cosmo.matterPowerSpectrum(k, z={4}))
+              "#, h as f64, om0 as f64 / 100.0, ob0 as f64 / 100.0, t0 as f64 / 100.0, z).as_str(), None, Some(locals)).unwrap();
+              let x: Vec<_> = locals.get_item("x").unwrap().extract::<Vec<f64>>().unwrap();
+              x
+            })
+          };
 
-  eisenstein_baryon_test!(h50, m50, b2, t270);
-  eisenstein_baryon_test!(h60, m50, b2, t270);
-  eisenstein_baryon_test!(h70, m50, b2, t270);
-  eisenstein_baryon_test!(h80, m50, b2, t270);
-  eisenstein_baryon_test!(h90, m50, b2, t270);
+          for i in 0..result.len() {
+            assert_eq_tol!(result[i], expected[i], 1e-4);
+          }
+        }
+      });
+    }
+  );
   
-  eisenstein_baryon_test!(h50, m25, b2, t270);
-  eisenstein_baryon_test!(h60, m25, b2, t270);
-  eisenstein_baryon_test!(h70, m25, b2, t270);
-  eisenstein_baryon_test!(h80, m25, b2, t270);
-  eisenstein_baryon_test!(h90, m25, b2, t270);
+  // eisenstein_power!(z0, h50, m30, b10, t270);
+  // eisenstein_power!(z0, h60, m30, b10, t270);
+  // eisenstein_power!(z0, h70, m30, b10, t270);
+  // eisenstein_power!(z0, h80, m30, b10, t270);
+  // eisenstein_power!(z0, h90, m30, b10, t270);
+  // eisenstein_power!(z0, h100, m30, b10, t270);
+  // seq_macro::seq!(H in 1..=10 {
+  //   seq_macro::seq!(M in 1..=10 {
+  //     seq_macro::seq!(B in 1..=5 {
+  //       seq_macro::seq!(T in 268..=272 {
+          // concat_idents::concat_idents!(hval = h, H, 0 {
+  dry::macro_for!($H in [h50, h60, h70, h80, h90, h100] {
+    dry::macro_for!($M in [m10, m30, m50, m70, m90] {
+      dry::macro_for!($B in [b1, b2, b3] {
+        dry::macro_for!($T in [t268, t270, t272] {
+          eisenstein_power!(z0, $H, $M, $B, $T);
+        });
+      });
+    });
+  });
 
-  eisenstein_baryon_test!(h50, m100, b10, t265);
-  eisenstein_baryon_test!(h60, m100, b10, t265);
-  eisenstein_baryon_test!(h70, m100, b10, t265);
-  eisenstein_baryon_test!(h80, m100, b10, t265);
-  eisenstein_baryon_test!(h90, m100, b10, t265);
+  dry::macro_for!($H in [h50, h60, h70, h80, h90, h100] {
+    dry::macro_for!($M in [m10, m30, m50, m70, m90, m100] {
+      dry::macro_for!($B in [b1, b2, b3] {
+        dry::macro_for!($T in [t268, t270, t272] {
+          eisenstein_baryon_test!($H, $M, $B, $T);
+        });
+      });
+    });
+  });
 
-  eisenstein_baryon_test!(h50, m75, b10, t265);
-  eisenstein_baryon_test!(h60, m75, b10, t265);
-  eisenstein_baryon_test!(h70, m75, b10, t265);
-  eisenstein_baryon_test!(h80, m75, b10, t265);
-  eisenstein_baryon_test!(h90, m75, b10, t265);
+  dry::macro_for!($H in [h50, h60, h70, h80, h90, h100] {
+    dry::macro_for!($M in [m10, m30, m50, m70, m90, m100] {
+      dry::macro_for!($T in [t268, t270, t272] {
+        eisenstein_no_baryon_test!($H, $M, $T);
+      });
+    });
+  });
 
-  eisenstein_baryon_test!(h50, m50, b10, t265);
-  eisenstein_baryon_test!(h60, m50, b10, t265);
-  eisenstein_baryon_test!(h70, m50, b10, t265);
-  eisenstein_baryon_test!(h80, m50, b10, t265);
-  eisenstein_baryon_test!(h90, m50, b10, t265);
-
-  eisenstein_baryon_test!(h50, m25, b10, t265);
-  eisenstein_baryon_test!(h60, m25, b10, t265);
-  eisenstein_baryon_test!(h70, m25, b10, t265);
-  eisenstein_baryon_test!(h80, m25, b10, t265);
-  eisenstein_baryon_test!(h90, m25, b10, t265);
-
-  eisenstein_baryon_test!(h50, m100, b2, t265);
-  eisenstein_baryon_test!(h60, m100, b2, t265);
-  eisenstein_baryon_test!(h70, m100, b2, t265);
-  eisenstein_baryon_test!(h80, m100, b2, t265);
-  eisenstein_baryon_test!(h90, m100, b2, t265);
-
-  eisenstein_baryon_test!(h50, m75, b2, t265);
-  eisenstein_baryon_test!(h60, m75, b2, t265);
-  eisenstein_baryon_test!(h70, m75, b2, t265);
-  eisenstein_baryon_test!(h80, m75, b2, t265);
-  eisenstein_baryon_test!(h90, m75, b2, t265);
-
-  eisenstein_baryon_test!(h50, m50, b2, t265);
-  eisenstein_baryon_test!(h60, m50, b2, t265);
-  eisenstein_baryon_test!(h70, m50, b2, t265);
-  eisenstein_baryon_test!(h80, m50, b2, t265);
-  eisenstein_baryon_test!(h90, m50, b2, t265);
-  
-  eisenstein_baryon_test!(h50, m25, b2, t265);
-  eisenstein_baryon_test!(h60, m25, b2, t265);
-  eisenstein_baryon_test!(h70, m25, b2, t265);
-  eisenstein_baryon_test!(h80, m25, b2, t265);
-  eisenstein_baryon_test!(h90, m25, b2, t265);
-
-  eisenstein_no_baryon_test!(h50, m100, t270);
-  eisenstein_no_baryon_test!(h60, m100, t270);
-  eisenstein_no_baryon_test!(h70, m100, t270);
-  eisenstein_no_baryon_test!(h80, m100, t270);
-  eisenstein_no_baryon_test!(h90, m100, t270);
-
-  eisenstein_no_baryon_test!(h50, m75, t270);
-  eisenstein_no_baryon_test!(h60, m75, t270);
-  eisenstein_no_baryon_test!(h70, m75, t270);
-  eisenstein_no_baryon_test!(h80, m75, t270);
-  eisenstein_no_baryon_test!(h90, m75, t270);
-
-  eisenstein_no_baryon_test!(h50, m50, t270);
-  eisenstein_no_baryon_test!(h60, m50, t270);
-  eisenstein_no_baryon_test!(h70, m50, t270);
-  eisenstein_no_baryon_test!(h80, m50, t270);
-  eisenstein_no_baryon_test!(h90, m50, t270);
-
-  eisenstein_no_baryon_test!(h50, m25, t270);
-  eisenstein_no_baryon_test!(h60, m25, t270);
-  eisenstein_no_baryon_test!(h70, m25, t270);
-  eisenstein_no_baryon_test!(h80, m25, t270);
-  eisenstein_no_baryon_test!(h90, m25, t270);
-
-  eisenstein_no_baryon_test!(h50, m100, t265);
-  eisenstein_no_baryon_test!(h60, m100, t265);
-  eisenstein_no_baryon_test!(h70, m100, t265);
-  eisenstein_no_baryon_test!(h80, m100, t265);
-  eisenstein_no_baryon_test!(h90, m100, t265);
-
-  eisenstein_no_baryon_test!(h50, m75, t265);
-  eisenstein_no_baryon_test!(h60, m75, t265);
-  eisenstein_no_baryon_test!(h70, m75, t265);
-  eisenstein_no_baryon_test!(h80, m75, t265);
-  eisenstein_no_baryon_test!(h90, m75, t265);
-
-  eisenstein_no_baryon_test!(h50, m50, t265);
-  eisenstein_no_baryon_test!(h60, m50, t265);
-  eisenstein_no_baryon_test!(h70, m50, t265);
-  eisenstein_no_baryon_test!(h80, m50, t265);
-  eisenstein_no_baryon_test!(h90, m50, t265);
-
-  eisenstein_no_baryon_test!(h50, m25, t265);
-  eisenstein_no_baryon_test!(h60, m25, t265);
-  eisenstein_no_baryon_test!(h70, m25, t265);
-  eisenstein_no_baryon_test!(h80, m25, t265);
-  eisenstein_no_baryon_test!(h90, m25, t265);
 }
