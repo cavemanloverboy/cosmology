@@ -222,7 +222,7 @@ pub enum Terminate {
 }
 
 /// This function does a single step of the rk4 algorithm in 1D
-pub fn rk4<F>(
+pub(crate) fn rk4<F>(
     // Function that evaluates derivative
     f: F,
     // Current time
