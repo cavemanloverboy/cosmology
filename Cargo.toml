@@ -11,5 +11,22 @@ description = "An early-in-development crate aiming to provide a lot of utilitie
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = []
+colossus-python = ["pyo3"]
+
 [dependencies]
+num = "0.4.0"
+special = "0.8.1"
+
+
+# Optional testing dependency!
+# We used colossus==1.3.1 for testing
+[dependencies.pyo3]
+version = "0.16.5"
+features = ["auto-initialize"]
+optional = true
+
+[dev-dependencies]
 plotters = "0.3.1"
+concat-idents = "1.1.3"
