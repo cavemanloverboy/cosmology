@@ -16,7 +16,7 @@ default = []
 colossus-python = ["pyo3"]
 
 [dependencies]
-special = "0.8.1"
+quadrature = "0.1.2"
 
 
 # Optional testing dependency!
