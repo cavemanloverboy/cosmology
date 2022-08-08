@@ -16,7 +16,6 @@ default = []
 colossus-python = ["pyo3"]
 
 [dependencies]
-num = "0.4.0"
 special = "0.8.1"
 
 
