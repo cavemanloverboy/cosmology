@@ -92,7 +92,7 @@ const ERROR_TOLERANCE: f64 = 1e-10;
 assert!(avg_diff < ERROR_TOLERANCE);
 ```
 
-About the Author:
+# About the Author
 
 I work on a lot of things including non-equilibrium fluid dynamics, cosmology (large scale structure and scalar field dark matter), machine learning, distributed systems, smart contracts, (financial) derivatives. I am a Rust zealot and was surprised to see that there is a gap to be filled in the astrophysics/cosmology crate space. This is a crate that I am looking forward to developing.
 
