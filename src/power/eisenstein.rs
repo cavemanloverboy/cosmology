@@ -279,22 +279,30 @@ impl EisensteinHu {
     }
 
     fn log_integrand_baryon(&self, logk: f64, r: f64) -> f64 {
+        // k is used several times so just `exp` once.
         let k = logk.exp();
 
+        // Calculate tophat_filter, fourier space
         let weight = self.tophat_filter(k, r);
 
+        // Calculate power
         let power = self.transfer_baryon(k).powi(2) * k.powf(self.ns);
 
+        // Pk * W^2 * k^2 * k dk
         power * weight.powi(2) * k.powi(3)
     }
 
     fn log_integrand_zero_baryon(&self, logk: f64, r: f64) -> f64 {
+        // k is used several times so just `exp` once.
         let k = logk.exp();
 
+        // Calculate tophat_filter, fourier space
         let weight = self.tophat_filter(k, r);
 
+        // Calculate power
         let power = self.transfer_zero_baryon(k).powi(2) * k.powf(self.ns);
 
+        // Pk * W^2 * k^2 * k dk
         power * weight.powi(2) * k.powi(3)
     }
 
@@ -302,6 +310,7 @@ impl EisensteinHu {
         // Dimensionless product kr
         let x = k * r;
 
+        // Numerical stablity for lim x -> 0
         if x < 1e-3 {
             1.0
         } else {
