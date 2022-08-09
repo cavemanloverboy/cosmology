@@ -23,6 +23,17 @@ pub struct EisensteinHu {
 }
 
 impl EisensteinHu {
+    /// Provide a set of cosmological parameters:
+    ///
+    /// `h: f64`: Hubble constant, little h
+    /// `omega_matter_0: f64`: Present density of matter in units of critical density
+    /// `omega_baryon_0: f64`: Present density of baryons in units of critical density
+    /// `temp_cmb0: f64`: Present emperature of CMB
+    /// `ns: f64`: Spectral index
+    /// `sigma_8: f64`: Power at 8 Mpc/h
+    /// 
+    /// and get an `EisensteinHu` struct if inputs are valid. This struct has methods to
+    /// calculate the power spectrum and transfer functions.
     pub fn new(
         h: f64,
         omega_matter_0: f64,
