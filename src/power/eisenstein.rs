@@ -34,6 +34,35 @@ impl EisensteinHu {
     /// 
     /// and get an `EisensteinHu` struct if inputs are valid. This struct has methods to
     /// calculate the power spectrum and transfer functions.
+    /// 
+    /// ```rust
+    /// use cosmology::power::eisenstein::*;
+    /// 
+    /// let h = 0.7;
+    /// let Om0 = 0.3;
+    /// let Omb = 0.025;
+    /// let Tcmb0 = 2.7;
+    /// let ns = 0.96;
+    /// let s8 = 0.90;
+    /// let eisen_hu = EisensteinHu::new(
+    ///     h,
+    ///     Om0,
+    ///     Omb,
+    ///     Tcmb0,
+    ///     ns,
+    ///     s8
+    /// ).expect("These are valid cosmo params");
+    /// 
+    /// let ks = [0.1, 1.0];
+    /// let z = 0.0;
+    /// let power = eisen_hu.power(&ks, z);
+    /// let power_nb = eisen_hu.power_zero_baryon(&ks, z);
+    /// 
+    /// let transfer = ks
+    ///     .map(|k| eisen_hu.transfer_baryon(k));
+    /// let transfer_nb = ks
+    ///     .map(|k| eisen_hu.transfer_zero_baryon(k));
+    /// ```
     pub fn new(
         h: f64,
         omega_matter_0: f64,
@@ -66,6 +95,8 @@ impl EisensteinHu {
     ///
     /// Given a slice of wavenumbers `&[T]`, returns the transfer function
     /// with the same units as `k`.
+    ///
+    /// For example usage see [`EisensteinHu`].
     #[allow(clippy::let_and_return)]
     pub fn power(&self, ks: &[f64], _z: f64) -> Vec<f64> {
         ks.iter()
@@ -87,6 +118,9 @@ impl EisensteinHu {
     ///
     /// Given a slice of wavenumbers `&[T]`, returns the transfer function
     /// with the same units as `k`.
+    /// 
+    /// API is identical to that of the `power` method. For example usage,
+    /// see [`EisensteinHu`].
     #[allow(clippy::let_and_return)]
     pub fn power_zero_baryon(&self, ks: &[f64], _z: f64) -> Vec<f64> {
         ks.iter()
@@ -101,8 +135,9 @@ impl EisensteinHu {
             .collect::<Vec<_>>()
     }
 
-    /// Transfer function. Tested against colossus
-    fn transfer_baryon(&self, k: f64) -> f64 {
+    /// Transfer function, with baryonic effects. 
+    /// For example usage, see [`EisensteinHu`].
+    pub fn transfer_baryon(&self, k: f64) -> f64 {
         // Auxilary values
         let omc = self.omega_matter_0 - self.omega_baryon_0;
         let ombom0 = self.omega_baryon_0 / self.omega_matter_0;
@@ -203,7 +238,7 @@ impl EisensteinHu {
     }
 
     // Ignore baryonic effects
-    fn transfer_zero_baryon(&self, k: f64) -> f64 {
+    pub fn transfer_zero_baryon(&self, k: f64) -> f64 {
         let ombom0 = self.omega_baryon_0 / self.omega_matter_0;
         let h2 = self.h.powi(2);
         let om0h2 = self.omega_matter_0 * h2;
@@ -555,7 +590,8 @@ mod tests {
 #[cfg(test)]
 #[cfg(feature = "colossus-python")]
 /// This set of unit tests directly uses the colossus package to test
-/// a larger subset of cosmological parameter space
+/// a larger subset of cosmological parameter space. This crate was 
+/// originally tested with colossus==1.3.1
 mod tests {
 
     macro_rules! eisenstein_transfer_baryon_test(
@@ -600,7 +636,8 @@ warnings.filterwarnings("ignore")
 x = []
 for k in ks:
   x.append(cosmology.power_spectrum.transferFunction(k, {0}, {1}, {2}, {3}, model='eisenstein98'))
-            "#, h as f64 / 100.0, om0 as f64 / 100.0, ob0 as f64 / 100.0, t0 as f64 / 100.0 ).as_str(), None, Some(locals)).unwrap();
+            "#, h as f64 / 100.0, om0 as f64 / 100.0,
+             ob0 as f64 / 100.0, t0 as f64 / 100.0 ).as_str(), None, Some(locals)).unwrap();
             let x: Vec<_> = locals.get_item("x").unwrap().extract::<Vec<f64>>().unwrap();
             x
           })
@@ -618,21 +655,22 @@ for k in ks:
   });
 
     macro_rules! eisenstein_no_baryon_test(
-    ($h0:ident, $om0:ident, $t0:ident) => {
+    ($h0:ident, $om0:ident, $ob0:ident, $t0:ident) => {
 
-      concat_idents::concat_idents!(test_name = test_eisen_hu_transfer_, $h0, _, $om0, _, $t0, {
+      concat_idents::concat_idents!(test_name = test_eisen_hu_transfer_nb_, $h0, _, $om0, _, $ob0, _, $t0, {
       #[test]
       fn test_name() {
 
         let h: u32 = stringify!($h0)[1..].parse::<u32>().unwrap();
         let om0: u32 = stringify!($om0)[1..].parse::<u32>().unwrap();
+        let ob0: u32 = stringify!($ob0)[1..].parse::<u32>().unwrap();
         let t0: u32 = stringify!($t0)[1..].parse::<u32>().unwrap();
 
         // Construct EisensteinHu model
         let eisen_hu = super::EisensteinHu::new(
           h as f64 / 100.0, // h
           om0 as f64 / 100.0, // omega_matter_0
-          0.0, // omega_baryon_0
+          ob0 as f64 / 100.0, // omega_baryon_0
           t0 as f64 / 100.0, // temp_cmb_0
           0.9665, // ns
           0.8102, // sigma8
@@ -657,8 +695,9 @@ import warnings
 warnings.filterwarnings("ignore")
 x = []
 for k in ks:
-  x.append(cosmology.power_spectrum.transferFunction(k, {0}, {1}, 0.0, {2}, model='eisenstein98_zb'))
-            "#, h as f64 / 100.0, om0 as f64 / 100.0, t0 as f64 / 100.0 ).as_str(), None, Some(locals)).unwrap();
+  x.append(cosmology.power_spectrum.transferFunction(k, {0}, {1}, {2}, {3}, model='eisenstein98_zb'))
+            "#, h as f64 / 100.0, om0 as f64 / 100.0,
+            ob0 as f64 / 100.0, t0 as f64 / 100.0 ).as_str(), None, Some(locals)).unwrap();
             let x: Vec<_> = locals.get_item("x").unwrap().extract::<Vec<f64>>().unwrap();
             x
           })
@@ -732,7 +771,8 @@ cosmo = cosmology.setCosmology("test")
 x = []
 for k in ks:
   x.append(cosmo.matterPowerSpectrum(k, z={4}))
-              "#, h as f64, om0 as f64 / 100.0, ob0 as f64 / 100.0, t0 as f64 / 100.0, z).as_str(), None, Some(locals)).unwrap();
+              "#, h as f64, om0 as f64 / 100.0, ob0 as f64 / 100.0,
+              t0 as f64 / 100.0, z).as_str(), None, Some(locals)).unwrap();
               let x: Vec<_> = locals.get_item("x").unwrap().extract::<Vec<f64>>().unwrap();
               x
             })
@@ -842,15 +882,8 @@ for k in ks:
             dry::macro_for!($B in [b1, b2, b3] {
                 dry::macro_for!($T in [t268, t270, t272] {
                     eisenstein_transfer_baryon_test!($H, $M, $B, $T);
+                    eisenstein_no_baryon_test!($H, $M, $B, $T);
                 });
-            });
-        });
-    });
-
-    dry::macro_for!($H in [h50, h60, h70, h80, h90, h100] {
-        dry::macro_for!($M in [m10, m30, m50, m70, m90, m100] {
-            dry::macro_for!($T in [t268, t270, t272] {
-                eisenstein_no_baryon_test!($H, $M, $T);
             });
         });
     });
