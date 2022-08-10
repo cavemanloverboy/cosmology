@@ -12,11 +12,15 @@ description = "An early-in-development crate aiming to provide a lot of utilitie
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = []
+default = ["bayesian"]
+bayesian = ["hammer-and-sample", "rand", "rand_pcg"]
 colossus-python = ["pyo3"]
 
 [dependencies]
 quadrature = "0.1.2"
+hammer-and-sample = { version = "0.1.4", features = ["rayon"], optional = true }
+rand = { version = "0.8.5", optional = true }
+rand_pcg = { version = "0.3.1", optional = true }
 
 # Optional testing dependency!
 # We used colossus==1.3.1 for testing
@@ -29,6 +33,7 @@ optional = true
 plotters = "0.3.1"
 concat-idents = "1.1.3"
 dry = "0.1.1"
+rand_distr = "0.4.3"
 
 [profile.dev]
 codegen-units = 1024
