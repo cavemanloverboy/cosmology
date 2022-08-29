@@ -3,7 +3,7 @@ use crate::scale_factor::{rk4_multi, rk4};
 
 
 const TARGET_ABSOLUTE_ERROR: f64 = 1e-10;
-const DEFAULT_DELTA_SCALE_FACTOR: f64 = 1e-6;
+const DEFAULT_DELTA_SCALE_FACTOR: f64 = 1e-4;
 
 /// Currently implemented only for flat universes with w = -1.
 pub(crate) fn linear_growth_factor(
@@ -43,7 +43,7 @@ pub(crate) fn linear_growth_factor(
                 let upper_a = (1.0 + z).recip();
 
                 // Prefactor
-                let prefactor = ha(upper_a) *  5.0 * omega_0 / 2.0;
+                let prefactor = ha(upper_a) * 5.0 * omega_0 / 2.0;
 
                 // Integrate
                 // let result = quadrature::integrate(
