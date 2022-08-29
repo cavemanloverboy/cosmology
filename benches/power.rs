@@ -4,8 +4,8 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use rand_distr::num_traits::Pow;
 
 
-const LOGK_MIN: f64 = 1e-2;
-const LOGK_MAX: f64 = 1e2;
+const LOGK_MIN: f64 = -2.0;
+const LOGK_MAX: f64 = 2.0;
 const NUM_K_POINTS: usize = 1000;
 
 fn bench_power(c: &mut Criterion) {
