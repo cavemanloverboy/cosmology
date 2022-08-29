@@ -1,6 +1,13 @@
 use quadrature::clenshaw_curtis::integrate;
 use std::f64::consts::{E as EULER, PI};
 
+use std::error::Error;
+use crate::power::growth_factor::linear_growth_factor;
+
+
+
+
+
 #[derive(Debug)]
 pub struct EisensteinHu {
     /// Present Hubble (little h, in units of km/s/Mpc)
@@ -36,7 +43,7 @@ impl EisensteinHu {
     /// calculate the power spectrum and transfer functions.
     /// 
     /// ```rust
-    /// use cosmology::power::eisenstein::*;
+    /// use cosmology::power::transfer::eisenstein::*;
     /// 
     /// let h = 0.7;
     /// let Om0 = 0.3;
@@ -55,8 +62,8 @@ impl EisensteinHu {
     /// 
     /// let ks = [0.1, 1.0];
     /// let z = 0.0;
-    /// let power = eisen_hu.power(&ks, z);
-    /// let power_nb = eisen_hu.power_zero_baryon(&ks, z);
+    /// let power = eisen_hu.power_z0(&ks);
+    /// let power_nb = eisen_hu.power_z0_zero_baryon(&ks);
     /// 
     /// let transfer = ks
     ///     .map(|k| eisen_hu.transfer_baryon(k));
@@ -71,8 +78,8 @@ impl EisensteinHu {
         ns: f64,
         sigma_8: f64,
     ) -> Result<EisensteinHu, &'static str> {
-        if omega_baryon_0 <= std::f64::MIN {
-            Err("The Eisenstein & Hu 98 transfer function cannot be computed for Ob0 = 0")
+        if omega_baryon_0 < 0.0 {
+            Err("The Eisenstein & Hu 98 transfer function cannot be computed for Ob0 < 0")
         } else if temp_cmb0 <= 0.0 {
             Err("Cannot have a nonpositive CMB temperature")
         } else if omega_baryon_0 > omega_matter_0 {
@@ -89,7 +96,7 @@ impl EisensteinHu {
         }
     }
 
-    /// Power spectrum at wavenumber k (Eisenstein & Hu 1998).
+    /// Power spectrum for wavenumber k at z = 0 (Eisenstein & Hu 1998).
     /// The code was adapted from Benedikt Diemer's COLOSSUS code,
     /// which was adapted from Matt Becker's cosmocalc code.
     ///
@@ -97,8 +104,7 @@ impl EisensteinHu {
     /// with the same units as `k`.
     ///
     /// For example usage see [`EisensteinHu`].
-    #[allow(clippy::let_and_return)]
-    pub fn power(&self, ks: &[f64], _z: f64) -> Vec<f64> {
+    pub fn power_z0(&self, ks: &[f64]) -> Vec<f64> {
         ks.iter()
             .map(|&k| {
                 let sigma_8 = self._sigma8_calc_baryon();
@@ -111,7 +117,35 @@ impl EisensteinHu {
             .collect::<Vec<_>>()
     }
 
-    /// Power spectrum at wavenumber k (Eisenstein & Hu 1998).
+    /// Power spectrum for wavenumber k at z = 0 (Eisenstein & Hu 1998).
+    /// The code was adapted from Benedikt Diemer's COLOSSUS code,
+    /// which was adapted from Matt Becker's cosmocalc code.
+    ///
+    /// Given a slice of wavenumbers `&[T]`, returns the transfer function
+    /// with the same units as `k`.
+    ///
+    /// For example usage see [`EisensteinHu`].
+    pub fn power_z(&self, ks: &[f64], z: f64) -> Result<Vec<f64>, Box<dyn Error>> {
+        let power_at_z0 = self.power_z0(ks);
+        let growth_factor = linear_growth_factor(
+            self.h,
+            self.omega_matter_0,
+            1.0 - self.omega_matter_0,
+            z
+        )?;
+        let growth_factor_norm = linear_growth_factor(
+            self.h,
+            self.omega_matter_0,
+            1.0 - self.omega_matter_0,
+            0.0 // z = 0.0
+        )?;
+        Ok(power_at_z0
+            .into_iter()
+            .map(|p0| p0 * (growth_factor / growth_factor_norm).powi(2))
+            .collect())
+    }
+
+    /// Power spectrum for wavenumber k at z = 0 (Eisenstein & Hu 1998).
     /// The code was adapted from Benedikt Diemer's COLOSSUS code,
     /// which was adapted from Matt Becker's cosmocalc code. This version
     /// uses the zero baryon model, which omits BAOs.
@@ -121,8 +155,7 @@ impl EisensteinHu {
     /// 
     /// API is identical to that of the `power` method. For example usage,
     /// see [`EisensteinHu`].
-    #[allow(clippy::let_and_return)]
-    pub fn power_zero_baryon(&self, ks: &[f64], _z: f64) -> Vec<f64> {
+    pub fn power_z0_zero_baryon(&self, ks: &[f64]) -> Vec<f64> {
         ks.iter()
             .map(|&k| {
                 let sigma_8 = self._sigma8_calc_zero_baryon();
@@ -133,6 +166,35 @@ impl EisensteinHu {
                 current_power
             })
             .collect::<Vec<_>>()
+    }
+
+    pub fn power_z_zero_baryon(&self, ks: &[f64], z: f64) -> Result<Vec<f64>, Box<dyn Error>> {
+        let power_at_z0 = ks.iter()
+            .map(|&k| {
+                let sigma_8 = self._sigma8_calc_zero_baryon();
+                let current_power = (self.sigma_8 / sigma_8).powi(2)
+                    * self.transfer_zero_baryon(k).powi(2)
+                    * k.powf(self.ns);
+
+                current_power
+            })
+            .collect::<Vec<_>>();
+        let growth_factor = linear_growth_factor(
+            self.h,
+            self.omega_matter_0,
+            1.0 - self.omega_matter_0,
+            z
+        )?;
+        let growth_factor_norm = linear_growth_factor(
+            self.h,
+            self.omega_matter_0,
+            1.0 - self.omega_matter_0,
+            0.0 // z = 0.0
+        )?;
+        Ok(power_at_z0
+            .into_iter()
+            .map(|p0| p0 * (growth_factor / growth_factor_norm).powi(2))
+            .collect())
     }
 
     /// Transfer function, with baryonic effects. 
@@ -544,7 +606,7 @@ mod tests {
         let ks = [1.0, 10.0, 100.0];
 
         // Get result at redshift zero
-        let result = eisen_hu.power(&ks, 0.0);
+        let result = eisen_hu.power_z0(&ks);
 
         // Expected values, from COLOSSUS
         let expected = vec![72.208536677773, 0.25444155136438845, 0.0005344388706918762];
@@ -555,7 +617,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_nonzero_redshift_power() {
         // Construct EisensteinHu model
         let eisen_hu = EisensteinHu::new(
@@ -571,8 +632,8 @@ mod tests {
         // Pick wavenumbers
         let ks = [1.0, 10.0, 100.0];
 
-        // Get result at redshift zero
-        let result = eisen_hu.power(&ks, 2.0);
+        // Get power at z = 2.0
+        let result: Vec<f64> = eisen_hu.power_z(&ks, 2.0).unwrap();
 
         // Expected values, from COLOSSUS
         let expected = vec![
@@ -582,7 +643,7 @@ mod tests {
         ];
 
         for i in 0..result.len() {
-            assert_eq_tol!(result[i], expected[i], 2e-1);
+            assert_eq_tol!(result[i], expected[i], 1e-4);
         }
     }
 }
@@ -646,6 +707,77 @@ for k in ks:
         for i in 0..ks.len() {
           assert_eq_tol!(
             eisen_hu.transfer_baryon(ks[i]),
+            expected[i],
+            1e-7
+          );
+        }
+      }
+    });
+  });
+
+  macro_rules! eisenstein_power_baryon_test(
+    ($h0:ident, $om0:ident, $ob0:ident, $z0:ident) => {
+
+      concat_idents::concat_idents!(test_name = test_eisen_hu_transfer_, $h0, _, $om0, _, $ob0, _, $t0, {
+      #[test]
+      fn test_name() {
+
+        let h: u32 = stringify!($h0)[1..].parse::<u32>().unwrap();
+        let om0: u32 = stringify!($om0)[1..].parse::<u32>().unwrap();
+        let ob0: u32 = stringify!($ob0)[1..].parse::<u32>().unwrap();
+        let z0: u32 = stringify!($z0)[1..].parse::<u32>().unwrap();
+
+        // Construct EisensteinHu model
+        let eisen_hu = super::EisensteinHu::new(
+          h as f64 / 100.0, // h
+          om0 as f64 / 100.0, // omega_matter_0
+          ob0 as f64 / 100.0, // omega_baryon_0
+          t0 as f64 / 100.0, // temp_cmb_0
+          0.9665, // ns
+          0.8102, // sigma8
+        ).unwrap();
+
+        // Pick wavenumbers
+        let ks = [0.1, 1.0, 10.0, 100.0];
+
+        // Expected values, from COLOSSUS
+        let expected = {
+          use pyo3::prelude::*;
+          use pyo3::types::*;
+          Python::with_gil(|py| {
+
+            // Get ks into python
+            let list = PyList::new(py, &ks);
+            let locals = PyDict::new(py);
+            locals.set_item("ks", list).unwrap();
+
+            py.run(format!(r#"from colossus.cosmology import cosmology
+import warnings
+warnings.filterwarnings("ignore")
+my_cosmo = {
+    "H0": {0},    
+    "Om0": {1},    
+    "Ob0": {2},  
+    "ns": 0.9665,
+    "sigma8": 0.8102, 
+}
+cosmology.addCosmology("my_cosmo", my_cosmo)
+cosmo = cosmology.setCosmology("my_cosmo")
+x = []
+for k in ks:
+  x.append(cosmo.matterPowerSpectrum(k, {z}))
+            "#, h as f64, om0 as f64 / 100.0,
+             ob0 as f64 / 100.0).as_str(), None, Some(locals)).unwrap();
+            let x: Vec<_> = locals.get_item("x").unwrap().extract::<Vec<f64>>().unwrap();
+            x
+          })
+        };
+
+        let power = eisen_hu.power_z(ks, z as f64);
+
+        for i in 0..ks.len() {
+          assert_eq_tol!(
+            power[i],
             expected[i],
             1e-7
           );
@@ -741,7 +873,7 @@ for k in ks:
           let ks = [0.1, 1.0, 10.0, 100.0];
 
           // Get result at redshift zero
-          let result = eisen_hu.power(&ks, 0.0);
+          let result = eisen_hu.power_z(&ks, z as f64).unwrap();
 
           // Expected values, from COLOSSUS
           let expected = {
@@ -763,8 +895,8 @@ params = {{
     "Om0": {1},
     "Ob0": {2},
     "Tcmb0": {3},
-    "sigma8": planck18.sigma8,
-    "ns": planck18.ns,
+    "ns": 0.9665,
+    "sigma8": 0.8102,
 }}
 cosmology.addCosmology("test", params=params)
 cosmo = cosmology.setCosmology("test")
@@ -779,7 +911,7 @@ for k in ks:
           };
 
           for i in 0..result.len() {
-            assert_eq_tol!(result[i], expected[i], 1e-4);
+            assert_eq_tol!(result[i], expected[i], 1e-2);
           }
         }
       });
@@ -813,7 +945,7 @@ for k in ks:
           let ks = [0.1, 1.0, 10.0, 100.0];
 
           // Get result at redshift zero
-          let result = eisen_hu.power_zero_baryon(&ks, 0.0);
+          let result = eisen_hu.power_z_zero_baryon(&ks, z as f64).unwrap();
 
           // Expected values, from COLOSSUS
           let expected = {
@@ -829,14 +961,13 @@ for k in ks:
               py.run(format!(r#"from colossus.cosmology import cosmology
 import warnings
 warnings.filterwarnings("ignore")
-planck18 = cosmology.setCosmology("planck18")
 params = {{
     "H0": {0},
     "Om0": {1},
     "Ob0": {2},
     "Tcmb0": {3},
-    "sigma8": planck18.sigma8,
-    "ns": planck18.ns,
+    "ns": 0.9665,
+    "sigma8": 0.8102,
 }}
 cosmology.addCosmology("test", params=params)
 cosmo = cosmology.setCosmology("test")
@@ -850,7 +981,7 @@ for k in ks:
           };
 
           for i in 0..result.len() {
-            assert_eq_tol!(result[i], expected[i], 1e-4);
+            assert_eq_tol!(result[i], expected[i], 1e-2);
           }
         }
       });
@@ -860,22 +991,16 @@ for k in ks:
     dry::macro_for!($H in [h50, h60, h70, h80, h90, h100] {
         dry::macro_for!($M in [m10, m30, m50, m70, m90] {
             dry::macro_for!($B in [b1, b2, b3] {
-                dry::macro_for!($T in [t268, t270, t272] {
-                    eisenstein_power!(z0, $H, $M, $B, $T);
+                dry::macro_for!($T in [t270] {
+                    dry::macro_for!($Z in [z0, z1, z2, z10] {
+                        eisenstein_power!($Z, $H, $M, $B, $T);
+                        eisenstein_power_no_baryon!($Z, $H, $M, $B, $T);
+                    });
                 });
             });
         });
     });
 
-    dry::macro_for!($H in [h50, h60, h70, h80, h90, h100] {
-      dry::macro_for!($M in [m10, m30, m50, m70, m90] {
-          dry::macro_for!($B in [b1, b2, b3] {
-              dry::macro_for!($T in [t268, t270, t272] {
-                  eisenstein_power_no_baryon!(z0, $H, $M, $B, $T);
-              });
-          });
-      });
-    });
 
     dry::macro_for!($H in [h50, h60, h70, h80, h90, h100] {
         dry::macro_for!($M in [m10, m30, m50, m70, m90, m100] {
