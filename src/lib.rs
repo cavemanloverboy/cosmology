@@ -7,5 +7,6 @@ pub mod bayesian;
 
 pub mod correlation;
 
+#[cfg(feature = "nn")]
 pub mod nn;
 
