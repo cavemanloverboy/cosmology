@@ -37,8 +37,8 @@ pub(crate) fn linear_growth_factor(
                 let ha = |a: f64| (omega_0 * a.powi(-3) + omega_de).sqrt();
 
                 // Construct integral parameters
-                // let integrand = |a: f64| a.powi(-3) * ha(a).powi(-1);
-                let integrand = |a: f64, _: f64| a.powi(-3) * ha(a).powi(-3);
+                let integrand = |a: f64| a.powi(-3) * ha(a).powi(-3);
+                // let integrand = |a: f64, _: f64| a.powi(-3) * ha(a).powi(-3);
                 let lower_a = 1e-6;
                 let upper_a = (1.0 + z).recip();
 
@@ -46,22 +46,22 @@ pub(crate) fn linear_growth_factor(
                 let prefactor = ha(upper_a) * 5.0 * omega_0 / 2.0;
 
                 // Integrate
-                // let result = quadrature::integrate(
-                //     integrand,
-                //     lower_a,
-                //     upper_a,
-                //     TARGET_ABSOLUTE_ERROR
-                // );
-                let result = {
-                    let mut current_a = lower_a;
-                    let mut area = lower_a;
-                    while current_a < upper_a {
-                        let da = DEFAULT_DELTA_SCALE_FACTOR.min(upper_a-current_a);
-                        area = rk4(integrand, current_a, area, da, None);
-                        current_a += da;
-                    }
-                    area
-                };
+                let result = quadrature::clenshaw_curtis::integrate(
+                    integrand,
+                    lower_a,
+                    upper_a,
+                    TARGET_ABSOLUTE_ERROR
+                );
+                // let result = {
+                //     let mut current_a = lower_a;
+                //     let mut area = lower_a;
+                //     while current_a < upper_a {
+                //         let da = DEFAULT_DELTA_SCALE_FACTOR.min(upper_a-current_a);
+                //         area = rk4(integrand, current_a, area, da, None);
+                //         current_a += da;
+                //     }
+                //     area
+                // };
 
                 // if result.error_estimate / result.integral > 10.0 * TARGET_ABSOLUTE_ERROR {
                 //     // return Err(
@@ -76,8 +76,8 @@ pub(crate) fn linear_growth_factor(
                 // }
 
                 // Multiply by prefactor
-                prefactor * result
-                // prefactor * result.integral
+                // prefactor * result
+                prefactor * result.integral
             };
 
             Ok(result)

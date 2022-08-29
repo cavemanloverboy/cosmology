@@ -6,6 +6,7 @@ pub mod transfer;
 pub mod growth_factor;
 
 
+#[derive(Clone)]
 pub struct PowerSpectrum(TransferFunctionEngine);
 
 pub enum TransferFunction {
@@ -27,9 +28,15 @@ pub enum TransferFunction {
     }
 }
 
+#[derive(Clone)]
 enum TransferFunctionEngine {
     EisensteinHu(EisensteinHu),
     EisensteinHuNoBaryon(EisensteinHu),
+}
+
+pub enum PowerFn<'a> {
+    EisensteinHu(EisenHuPackage<'a>),
+    EisensteinHuNoBaryon(EisenHuPackage<'a>),
 }
 
 impl PowerSpectrum {
@@ -76,11 +83,44 @@ impl PowerSpectrum {
 
             // Eistenstein & Hu 1998 (zero baryon, i.e. no BAO)
             TransferFunctionEngine::EisensteinHuNoBaryon(e_hu_engine) => {
-                Ok(e_hu_engine.power_z0_zero_baryon(ks))
+                e_hu_engine.power_z_zero_baryon(ks, z)
             }
 
         }
         
+    }
+
+    pub fn power_fn(
+        &self,
+        z: f64,
+    ) -> Result<PowerFn, Box<dyn std::error::Error>> {
+        
+        match &self.0 {   
+
+            // Eistenstein & Hu 1998
+            TransferFunctionEngine::EisensteinHu(e_hu_engine) => {
+                e_hu_engine.power_z_at_k_packaged(z)
+                    .map(move |pkg| PowerFn::EisensteinHu(pkg))
+            },
+
+            // Eistenstein & Hu 1998 (zero baryon, i.e. no BAO)
+            TransferFunctionEngine::EisensteinHuNoBaryon(e_hu_engine) => {
+                e_hu_engine.power_z_at_k_packaged_zb(z)
+                    .map(move |pkg| PowerFn::EisensteinHuNoBaryon(pkg))
+            }
+
+        }
+        
+    }
+}
+
+
+impl<'a> PowerFn<'a> {
+    pub(crate) fn power(&self, k: f64) -> f64 {
+        match self {
+            PowerFn::EisensteinHu(pkg) => pkg.power_at_k(k),
+            PowerFn::EisensteinHuNoBaryon(pkg) => pkg.power_at_k(k),
+        }
     }
 }
 

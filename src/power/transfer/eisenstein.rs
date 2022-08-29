@@ -1,6 +1,6 @@
 use quadrature::clenshaw_curtis::integrate;
 use std::f64::consts::{E as EULER, PI};
-
+use std::sync::{Arc, RwLock};
 use std::error::Error;
 use crate::power::growth_factor::linear_growth_factor;
 
@@ -8,7 +8,7 @@ use crate::power::growth_factor::linear_growth_factor;
 
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EisensteinHu {
     /// Present Hubble (little h, in units of km/s/Mpc)
     h: f64,
@@ -27,7 +27,16 @@ pub struct EisensteinHu {
 
     /// Power at 8 Mpc/h
     sigma_8: f64,
+
+    /// Cache for sigma 8 normalization denominator.
+    cached_s8_norm: Arc<RwLock<Option<f64>>>,
+
+    /// Cache for sigma 8 normalization denominator, for the zb model.
+    cached_zb_s8_norm: Arc<RwLock<Option<f64>>>,
 }
+
+
+
 
 impl EisensteinHu {
     /// Provide a set of cosmological parameters:
@@ -92,6 +101,8 @@ impl EisensteinHu {
                 temp_cmb0,
                 ns,
                 sigma_8,
+                cached_s8_norm: Arc::new(RwLock::new(None)),
+                cached_zb_s8_norm: Arc::new(RwLock::new(None)),
             })
         }
     }
@@ -106,7 +117,7 @@ impl EisensteinHu {
     /// For example usage see [`EisensteinHu`].
     pub fn power_z0(&self, ks: &[f64]) -> Vec<f64> {
 
-        // Calculate s8 normalization
+        // Calculate s8 normalization, or use cached value
         let sigma_8 = self._sigma8_calc_baryon();
 
         // Calculate power at every wavenumber
@@ -119,7 +130,7 @@ impl EisensteinHu {
             .collect::<Vec<_>>()
     }
 
-    /// Power spectrum for wavenumber k at z = 0 (Eisenstein & Hu 1998).
+    /// Power spectrum for wavenumbers ks at arbitrary z (Eisenstein & Hu 1998).
     /// The code was adapted from Benedikt Diemer's COLOSSUS code,
     /// which was adapted from Matt Becker's cosmocalc code.
     ///
@@ -147,6 +158,70 @@ impl EisensteinHu {
             .collect())
     }
 
+    /// Packages all the ingredients and returns a `Result` containing an [EisenHuPackage],
+    /// containing a boxed closure which calculates the power at k at redshift z.
+    pub(crate) fn power_z_at_k_packaged(&self, z: f64) -> Result<EisenHuPackage, Box<dyn Error>> {
+
+        // Calculate s8 normalization, or use cached value
+        let sigma_8 = self._sigma8_calc_baryon();
+
+        // Get growth factor normalization
+        let growth_factor = linear_growth_factor(
+            self.h,
+            self.omega_matter_0,
+            1.0 - self.omega_matter_0,
+            z
+        )?;
+        let growth_factor_norm = linear_growth_factor(
+            self.h,
+            self.omega_matter_0,
+            1.0 - self.omega_matter_0,
+            0.0 // z = 0.0
+        )?;
+
+        // Calculate power at every wavenumber
+        let power_at_z_at_k = move |k| {
+                (self.sigma_8 / sigma_8).powi(2)
+                    * self.transfer_baryon(k).powi(2)
+                    * k.powf(self.ns)
+                    * (growth_factor / growth_factor_norm).powi(2)
+            };
+
+        Ok(EisenHuPackage { power: Box::new(power_at_z_at_k) })
+    }
+
+    /// Packages all the ingredients and returns a `Result` containing an [EisenHuPackage],
+    /// containing a boxed closure which calculates the power at k at redshift z. For the zb model.
+    pub(crate) fn power_z_at_k_packaged_zb(&self, z: f64) -> Result<EisenHuPackage, Box<dyn Error>> {
+
+        // Calculate s8 normalization, or use cached value
+        let sigma_8 = self._sigma8_calc_zero_baryon();
+
+        // Get growth factor normalization
+        let growth_factor = linear_growth_factor(
+            self.h,
+            self.omega_matter_0,
+            1.0 - self.omega_matter_0,
+            z
+        )?;
+        let growth_factor_norm = linear_growth_factor(
+            self.h,
+            self.omega_matter_0,
+            1.0 - self.omega_matter_0,
+            0.0 // z = 0.0
+        )?;
+
+        // Calculate power at every wavenumber
+        let power_at_z_at_k = move |k| {
+                (self.sigma_8 / sigma_8).powi(2)
+                    * self.transfer_zero_baryon(k).powi(2)
+                    * k.powf(self.ns)
+                    * (growth_factor / growth_factor_norm).powi(2)
+            };
+
+        Ok(EisenHuPackage { power: Box::new(power_at_z_at_k) })
+    }
+
     /// Power spectrum for wavenumber k at z = 0 (Eisenstein & Hu 1998).
     /// The code was adapted from Benedikt Diemer's COLOSSUS code,
     /// which was adapted from Matt Becker's cosmocalc code. This version
@@ -159,8 +234,8 @@ impl EisensteinHu {
     /// see [`EisensteinHu`].
     pub fn power_z0_zero_baryon(&self, ks: &[f64]) -> Vec<f64> {
 
-        // Calculate s8 normalization
-        let sigma_8 = self._sigma8_calc_baryon();
+        // Calculate s8 normalization, or used cached value
+        let sigma_8 = self._sigma8_calc_zero_baryon();
 
         // Calculate power at every wavenumber
         ks.iter()
@@ -173,16 +248,7 @@ impl EisensteinHu {
     }
 
     pub fn power_z_zero_baryon(&self, ks: &[f64], z: f64) -> Result<Vec<f64>, Box<dyn Error>> {
-        let power_at_z0 = ks.iter()
-            .map(|&k| {
-                let sigma_8 = self._sigma8_calc_zero_baryon();
-                let current_power = (self.sigma_8 / sigma_8).powi(2)
-                    * self.transfer_zero_baryon(k).powi(2)
-                    * k.powf(self.ns);
-
-                current_power
-            })
-            .collect::<Vec<_>>();
+        let power_at_z0 = self.power_z0_zero_baryon(ks);
         let growth_factor = linear_growth_factor(
             self.h,
             self.omega_matter_0,
@@ -337,57 +403,88 @@ impl EisensteinHu {
     }
 
     fn _sigma8_calc_baryon(&self) -> f64 {
-        // Calculate sigma squared integral
-        const LOGK_MIN: f64 = -10.0;
-        const LOGK_MAX: f64 = 10.0;
-        const SUB_INTERVALS: usize = 300;
-        let sigma_2: f64 = (0..SUB_INTERVALS)
-            .map(|i| {
-                // Interval bounds
-                let min = LOGK_MIN + i as f64 * (LOGK_MAX - LOGK_MIN) / SUB_INTERVALS as f64;
-                let max = LOGK_MIN + (i + 1) as f64 * (LOGK_MAX - LOGK_MIN) / SUB_INTERVALS as f64;
 
-                // Integrate over this sub_interval
-                let integ = integrate(
-                    |logk: f64| self.log_integrand_baryon(logk, 8.0),
-                    min,
-                    max,
-                    1e-8,
-                );
+        let read_lock = self.cached_zb_s8_norm.read().unwrap();
+        if let Some(cached) = *read_lock {
 
-                // Return result of integral
-                integ.integral
-            })
-            .sum();
+            // Return value if cached
+            cached
+        } else {
+            drop(read_lock);
 
-        sqrt(sigma_2 / 2.0 / PI.powi(2))
+            // Otherwise calculate and cache for future use
+            *self.cached_s8_norm.write().unwrap() = Some({
+
+                // Calculate sigma squared integral
+                const LOGK_MIN: f64 = -10.0;
+                const LOGK_MAX: f64 = 10.0;
+                const SUB_INTERVALS: usize = 300;
+                let sigma_2: f64 = (0..SUB_INTERVALS)
+                    .map(|i| {
+                        // Interval bounds
+                        let min = LOGK_MIN + i as f64 * (LOGK_MAX - LOGK_MIN) / SUB_INTERVALS as f64;
+                        let max = LOGK_MIN + (i + 1) as f64 * (LOGK_MAX - LOGK_MIN) / SUB_INTERVALS as f64;
+
+                        // Integrate over this sub_interval
+                        let integ = integrate(
+                            |logk: f64| self.log_integrand_baryon(logk, 8.0),
+                            min,
+                            max,
+                            1e-8,
+                        );
+
+                        // Return result of integral
+                        integ.integral
+                    })
+                    .sum();
+
+                sqrt(sigma_2 / 2.0 / PI.powi(2))
+            });
+
+            self.cached_s8_norm.read().unwrap().unwrap()
+        }
     }
 
     fn _sigma8_calc_zero_baryon(&self) -> f64 {
-        // Calculate sigma squared integral
-        const LOGK_MIN: f64 = -10.0;
-        const LOGK_MAX: f64 = 10.0;
-        const SUB_INTERVALS: usize = 1000;
-        let sigma_2: f64 = (0..SUB_INTERVALS)
-            .map(|i| {
-                // Interval bounds
-                let min = LOGK_MIN + i as f64 * (LOGK_MAX - LOGK_MIN) / SUB_INTERVALS as f64;
-                let max = LOGK_MIN + (i + 1) as f64 * (LOGK_MAX - LOGK_MIN) / SUB_INTERVALS as f64;
 
-                // Integrate over this sub_interval
-                let integ = integrate(
-                    |logk: f64| self.log_integrand_zero_baryon(logk, 8.0),
-                    min,
-                    max,
-                    1e-8,
-                );
+        let read_lock = self.cached_zb_s8_norm.read().unwrap();
+        if let Some(cached) = *read_lock {
 
-                // Return result of integral
-                integ.integral
-            })
-            .sum();
+            // Return value if cached
+            cached
+        } else {
+            drop(read_lock);
 
-        sqrt(sigma_2 / 2.0 / PI.powi(2))
+            // Otherwise calculate and cache for future use
+            *self.cached_zb_s8_norm.write().unwrap() = Some({
+                // Calculate sigma squared integral
+                const LOGK_MIN: f64 = -10.0;
+                const LOGK_MAX: f64 = 10.0;
+                const SUB_INTERVALS: usize = 1000;
+                let sigma_2: f64 = (0..SUB_INTERVALS)
+                    .map(|i| {
+                        // Interval bounds
+                        let min = LOGK_MIN + i as f64 * (LOGK_MAX - LOGK_MIN) / SUB_INTERVALS as f64;
+                        let max = LOGK_MIN + (i + 1) as f64 * (LOGK_MAX - LOGK_MIN) / SUB_INTERVALS as f64;
+
+                        // Integrate over this sub_interval
+                        let integ = integrate(
+                            |logk: f64| self.log_integrand_zero_baryon(logk, 8.0),
+                            min,
+                            max,
+                            1e-8,
+                        );
+
+                        // Return result of integral
+                        integ.integral
+                    })
+                    .sum();
+
+                sqrt(sigma_2 / 2.0 / PI.powi(2))
+            });
+
+            self.cached_zb_s8_norm.read().unwrap().unwrap()
+        }
     }
 
     fn log_integrand_baryon(&self, logk: f64, r: f64) -> f64 {
@@ -428,6 +525,16 @@ impl EisensteinHu {
         } else {
             3.0 / x.powi(3) * (sin(x) - x * cos(x))
         }
+    }
+}
+
+pub struct EisenHuPackage<'a> {
+    /// Transfer function * k^ns * norm
+    power: Box<dyn Fn(f64) -> f64 + 'a>,
+}
+impl<'a> EisenHuPackage<'a> {
+    pub fn power_at_k(&self, k: f64) -> f64 {
+        (*self.power)(k)
     }
 }
 
