@@ -105,14 +105,16 @@ impl EisensteinHu {
     ///
     /// For example usage see [`EisensteinHu`].
     pub fn power_z0(&self, ks: &[f64]) -> Vec<f64> {
+
+        // Calculate s8 normalization
+        let sigma_8 = self._sigma8_calc_baryon();
+
+        // Calculate power at every wavenumber
         ks.iter()
             .map(|&k| {
-                let sigma_8 = self._sigma8_calc_baryon();
-                let current_power = (self.sigma_8 / sigma_8).powi(2)
+                (self.sigma_8 / sigma_8).powi(2)
                     * self.transfer_baryon(k).powi(2)
-                    * k.powf(self.ns);
-
-                current_power
+                    * k.powf(self.ns)
             })
             .collect::<Vec<_>>()
     }
@@ -156,14 +158,16 @@ impl EisensteinHu {
     /// API is identical to that of the `power` method. For example usage,
     /// see [`EisensteinHu`].
     pub fn power_z0_zero_baryon(&self, ks: &[f64]) -> Vec<f64> {
+
+        // Calculate s8 normalization
+        let sigma_8 = self._sigma8_calc_baryon();
+
+        // Calculate power at every wavenumber
         ks.iter()
             .map(|&k| {
-                let sigma_8 = self._sigma8_calc_zero_baryon();
-                let current_power = (self.sigma_8 / sigma_8).powi(2)
+                (self.sigma_8 / sigma_8).powi(2)
                     * self.transfer_zero_baryon(k).powi(2)
-                    * k.powf(self.ns);
-
-                current_power
+                    * k.powf(self.ns)
             })
             .collect::<Vec<_>>()
     }
@@ -334,9 +338,9 @@ impl EisensteinHu {
 
     fn _sigma8_calc_baryon(&self) -> f64 {
         // Calculate sigma squared integral
-        const LOGK_MIN: f64 = -20.0;
-        const LOGK_MAX: f64 = 20.0;
-        const SUB_INTERVALS: usize = 100;
+        const LOGK_MIN: f64 = -10.0;
+        const LOGK_MAX: f64 = 10.0;
+        const SUB_INTERVALS: usize = 300;
         let sigma_2: f64 = (0..SUB_INTERVALS)
             .map(|i| {
                 // Interval bounds
@@ -361,9 +365,9 @@ impl EisensteinHu {
 
     fn _sigma8_calc_zero_baryon(&self) -> f64 {
         // Calculate sigma squared integral
-        const LOGK_MIN: f64 = -20.0;
-        const LOGK_MAX: f64 = 20.0;
-        const SUB_INTERVALS: usize = 100;
+        const LOGK_MIN: f64 = -10.0;
+        const LOGK_MAX: f64 = 10.0;
+        const SUB_INTERVALS: usize = 1000;
         let sigma_2: f64 = (0..SUB_INTERVALS)
             .map(|i| {
                 // Interval bounds
