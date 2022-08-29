@@ -221,8 +221,10 @@ pub enum Terminate {
     Time(f64),
 }
 
-/// This function does a single step of the rk4 algorithm in 1D
-pub fn rk4<F>(
+/// This function does a single step of the rk4 algorithm in 1D.
+/// It is tested indirectly through the tests for solving the Friedmann Equation
+/// for the evolution of the scale factor.
+pub(crate) fn rk4<F>(
     // Function that evaluates derivative
     f: F,
     // Current time
@@ -252,3 +254,76 @@ where
     // Return new value as per RK4
     yn + h * (k1 + 2.0 * k2 + 2.0 * k3 + k4) / 6.0
 }
+
+/// This function does a single step of the rk4 algorithm in 1D.
+/// It is tested indirectly through the tests for solving the Friedmann Equation
+/// for the evolution of the scale factor.
+pub(crate) fn rk4_multi<F, const N: usize>(
+    // Function that evaluates derivative
+    f: F,
+    // Current time
+    tn: Time,
+    // Current function values
+    yn: [f64; N],
+    // Timestep
+    h: f64,
+) -> [f64; N]
+where
+    F: Fn(Time, [f64; N]) -> [f64; N],
+{
+    // Initialize mutable arrays (on the stack)
+    let mut scratch: [f64; N] = [0.0; N];
+
+    // Evaluate the derivative function at (tn, yn)
+    let k1: [f64; N] = f(tn, yn);
+
+    // Evaluate the derivative funciton at (tn + h/2, y + h*k1/2)
+    for i in 0..N {
+        // Here, scratch is yn + h * k1 / 2.0
+       scratch[i] = yn[i] + h * k1[i] / 2.0;
+    }
+    let k2: [f64; N] = f(tn + h / 2.0, scratch);
+
+    // Evaluate the derivative funciton at (tn + h/2, y + h*k2/2)
+    for i in 0..N {
+        // Here, scratch is yn + h * k2 / 2.0
+       scratch[i] = yn[i] + h * k2[i] / 2.0;
+    }
+    let k3: [f64; N] = f(tn + h / 2.0, scratch);
+
+    // Evaluate the derivative function at (tn + h, y + h*k3)
+    for i in 0..N {
+        // Here, scratch is yn + h * k3
+       scratch[i] = yn[i] + h * k3[i];
+    }
+    let k4: [f64; N] = f(tn + h, scratch);
+
+    // Return new value as per RK4
+    for i in 0..N {
+        // Here, scratch is the Rk4 result
+       scratch[i] = yn[i] + h * (k1[i] + 2.0 * k2[i] + 2.0 * k3[i] + k4[i]) / 6.0;
+    }
+    scratch
+}
+
+
+#[test]
+fn test_rk4_impls_are_consistent() {
+
+    // y = t^2 --> y' = 2t.
+    let t0 = 0.0;
+    let y0 = 0.0;
+    let f = |t: f64, y0: f64| 2.0 * t;
+
+    let y0_multi = [0.0];
+    let f_multi = |t: f64, y0: [f64; 1]| [2.0 * t];
+
+    let dt = 1.0;
+
+    let first_result = rk4(f, t0, y0, dt, None);
+    let second_result = rk4_multi(f_multi, t0, y0_multi, dt);
+
+    assert_eq!(first_result, second_result[0]);
+
+}
+
