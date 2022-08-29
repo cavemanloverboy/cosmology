@@ -44,3 +44,7 @@ codegen-units = 1024
 [[bench]]
 name = "power"
 harness = false
+
+[[bench]]
+name = "correlation"
+harness = false
