@@ -22,6 +22,7 @@ hammer-and-sample = { version = "0.1.4", features = ["rayon"], optional = true }
 rand = { version = "0.8.5", optional = true }
 rand_pcg = { version = "0.3.1", optional = true }
 criterion = "0.3.6"
+ouroboros = "0.15.3"
 
 # Optional testing dependency!
 # We used colossus==1.3.1 for testing
