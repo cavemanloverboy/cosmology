@@ -11,22 +11,22 @@ use crate::power::growth_factor::linear_growth_factor;
 #[derive(Debug, Clone)]
 pub struct EisensteinHu {
     /// Present Hubble (little h, in units of km/s/Mpc)
-    h: f64,
+    pub(crate) h: f64,
 
     /// Present density of matter in units of critical density
-    omega_matter_0: f64,
+    pub(crate) omega_matter_0: f64,
 
     /// Present density of baryons in units of critical density
-    omega_baryon_0: f64,
+    pub(crate) omega_baryon_0: f64,
 
     /// Present emperature of CMB
-    temp_cmb0: f64,
+    pub(crate) temp_cmb0: f64,
 
     /// Spectral index
-    ns: f64,
+    pub(crate) ns: f64,
 
     /// Power at 8 Mpc/h
-    sigma_8: f64,
+    pub(crate) sigma_8: f64,
 
     /// Cache for sigma 8 normalization denominator.
     cached_s8_norm: Arc<RwLock<Option<f64>>>,
@@ -530,7 +530,7 @@ impl EisensteinHu {
 
 pub struct EisenHuPackage<'a> {
     /// Transfer function * k^ns * norm
-    power: Box<dyn Fn(f64) -> f64 + 'a>,
+    power: Box<dyn Fn(f64) -> f64 + 'a + Send + Sync>,
 }
 impl<'a> EisenHuPackage<'a> {
     pub fn power_at_k(&self, k: f64) -> f64 {
