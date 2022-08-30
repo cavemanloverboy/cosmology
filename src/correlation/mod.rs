@@ -1,17 +1,14 @@
-use std::ops::Sub;
+use std::f64::consts::PI;
 use std::error::Error;
 use quadrature::Output;
 use ouroboros::self_referencing;
-use crate::power::{PowerSpectrum, PowerFn};
-
+use crate::{power::{PowerSpectrum, PowerFn, TransferFunction}, utils::math::spherical_jn};
 
 
 /// Default parameter for the lower k-bound of the correlation function integral
 pub const CORR_LOGK_MIN: f64 = -10.0;
 /// Default parameter for the upper k-bound of the correlation function integral
 pub const CORR_LOGK_MAX: f64 = 10.0;
-// /// Default parameter for the number of points used for the correlation function integral
-// pub const CORR_K_POINTS: usize = 200;
 // /// Default parameter for the number of points used for the correlation function integral
 pub const CORR_ABS_ERROR: f64 = 1e-6;
 
@@ -30,59 +27,65 @@ pub struct CorrelationFunction {
 
 impl CorrelationFunction {
 
+    /// Calculates the linear theory correlation function in real-space
     pub fn correlation_function(
         &self,
         r: f64
     ) -> f64 {
+
+        // Define prefactor and integrand
+        let prefactor = (2.0 * PI).powi(-2);
         let integrand = |k: f64| {
             k.powi(2) * self.borrow_power_at_k().power(k) * (k * r).sin() / (k * r)
         };
+
+        // Carry out integral
         let cf = quadrature::integrate(
             integrand,
             10_f64.powf(*self.borrow_lower_logk()),
             10_f64.powf(*self.borrow_upper_logk()),
             *self.borrow_target_error()
         );
-
         check_integral(&cf);
-        cf.integral
+
+        // Return result
+        prefactor * cf.integral
     }
+
+    // /// Returns the linear theory correlation function RSD monopole.
+    // /// Inspired by Kaiser 1987, Hamilton 1992 RSDs (in redshift-space).
+    // pub fn rsd_correlation_function_monopole(
+    //     &self,
+    //     r: f64,
+    //     b: f64,
+    // ) -> (f64, f64, f64) {
+
+    //     // Get linear theory real-space monopole
+    //     let corr_real = self.correlation_function(r);
+
+    //     // Calculate growth rate
+    //     let omega_matter = self.borrow_params().power.get_omega_matter();
+    //     let f = omega_matter.powf(5.0/9.0);
+
+    //     // Return result
+    //     (corr_real, prefactor * cf_2.integral, prefactor * cf_4.integral)
+    // }
 
     pub fn get_correlation_function(
         z: f64,
         params: CorrelationFunctionParameters
     ) -> Result<CorrelationFunction, Box<dyn Error>> {
 
-        // Get the power spectrum over the specified domain
-        // To do that, first get the wavenumbers
-        // let ks: Vec<f64> = {
-        let lower_logk;
-        let upper_logk;
-        // let num_k_points;
-        let target_error;
-        if let Some(ref acc_params) = params.accuracy_params {
-            lower_logk = acc_params.lower_logk_bound;
-            upper_logk = acc_params.upper_logk_bound;
-            // num_k_points = acc_params.num_k_points;
-            target_error = acc_params.target_error;
-        } else {
-            lower_logk = CORR_LOGK_MIN;
-            upper_logk = CORR_LOGK_MAX;
-            // num_k_points = CORR_K_POINTS;
-            target_error = CORR_ABS_ERROR;
-        }
-        
-            // The subtraction operation here because the first point is zero steps
-            // away from the lower bound.
-            // let dlogk_step = (upper_logk-lower_logk)/(num_k_points.sub(1) as f64);
-
-            // (0..CORR_K_POINTS)
-            //     .map(|i| 10.0_f64.powf(lower_logk + i as f64 * dlogk_step))
-            //     .collect()
-        // };
-
-        // // Then get the power over the specified domain
-        // let power: Vec<f64> = params.power.calculate_power(&ks, z)?;
+        // Specify domain of integration, target error
+        let (lower_logk, upper_logk, target_error) = {
+            if let Some(ref acc_params) = params.accuracy_params {
+                // User specified bounds, error
+                (acc_params.lower_logk_bound, acc_params.upper_logk_bound, acc_params.target_error)
+            } else {
+                // Default parameters if None
+                (CORR_LOGK_MIN, CORR_LOGK_MAX, CORR_ABS_ERROR)
+            }
+        };
   
         Ok(
             CorrelationFunctionBuilder {
@@ -122,5 +125,4 @@ pub struct CorrFuncAccuracyParameters {
     lower_logk_bound: f64,
     upper_logk_bound: f64,
     target_error: f64,
-    // num_k_points: usize,
 }

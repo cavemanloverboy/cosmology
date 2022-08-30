@@ -1,6 +1,6 @@
 
 
-fn calculate_grf_cdf(
+pub(super) fn calculate_grf_cdf(
     r: f64,
     nbar: f64,
     i: f64,

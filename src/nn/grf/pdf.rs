@@ -1,7 +1,7 @@
 
 
 
-fn calculate_grf_pdf(
+pub(super) fn calculate_grf_pdf(
     r: f64,
     nbar: f64,
     i: f64,
