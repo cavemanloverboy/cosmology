@@ -313,10 +313,10 @@ fn test_rk4_impls_are_consistent() {
     // y = t^2 --> y' = 2t.
     let t0 = 0.0;
     let y0 = 0.0;
-    let f = |t: f64, y0: f64| 2.0 * t;
+    let f = |t: f64, _y0: f64| 2.0 * t;
 
     let y0_multi = [0.0];
-    let f_multi = |t: f64, y0: [f64; 1]| [2.0 * t];
+    let f_multi = |t: f64, _y0: [f64; 1]| [2.0 * t];
 
     let dt = 1.0;
 
