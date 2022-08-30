@@ -1,5 +1,6 @@
 use std::f64::consts::PI;
 use std::error::Error;
+use std::ops::{Add, Sub};
 use quadrature::Output;
 use ouroboros::self_referencing;
 use crate::power::{PowerSpectrum, PowerFn};
@@ -10,8 +11,8 @@ use crate::utils::integration::rk4_integrator;
 pub const CORR_LOGK_MIN: f64 = -6.0;
 /// Default parameter for the upper k-bound of the correlation function integral
 pub const CORR_LOGK_MAX: f64 = 6.0;
-/// Default parameter for the abs error of the integrator (very low to maximize num iterations)
-pub const CORR_ABS_ERROR: f64 = 1e-5;
+/// Default parameter for the abs error of the integrator
+pub const CORR_ABS_ERROR: f64 = 1e-6;
 // /// At r = 100, this gives 1/100th of a period
 // const MAX_K_STEP: f64 = 2.0 * PI / 100.0 / 100.0;
 
@@ -36,44 +37,65 @@ impl CorrelationFunction {
         r: f64
     ) -> f64 {
 
-        // Define prefactor and integrand
+        // Define prefactor
         let prefactor = (2.0 * (PI).powi(2)).recip();
-        let integrand = |log10k: f64| {
-            let k = 10_f64.powf(log10k);
-            let jacobian = k * 10_f64.ln();
-            k.powi(2) * self.borrow_power_at_k().power(k) * (k * r).sin() / (k * r) * jacobian
+
+        // Linear integrand
+        let integrand = |k: f64| {
+            k * self.borrow_power_at_k().power(k) * (k * r).sin() / r
         };
 
         // Carry out integral
-        // let intervals = (r as usize).max(1);
-        // let mut result = 0.0;
-        // for i in 0..intervals {
-        //     let cf = quadrature::clenshaw_curtis::integrate(
-        //         integrand,
-        //         // 10_f64.powf(*self.borrow_lower_logk()),
-        //         *self.borrow_lower_logk()*(i as f64) / intervals as f64,
-        //         // 10_f64.powf(*self.borrow_upper_logk()),
-        //         *self.borrow_upper_logk()*(i.add(1) as f64) / intervals as f64,
-        //         *self.borrow_target_error()
-        //     );
-        //     check_integral(&cf);
-        //     result += cf.integral
-        // }
-
-        // 20th of a period, unless r < 1.0.
-        // dk = 2 * PI / 20 / r
-        // change to dlog10dk at a particular k
-        // dlog10k = dk / ln(10) / k
-        let max_log_k_at_k100 = 2.0 * PI / 20.0 / r.max(1.0) / 10_f64.ln() / 100.0;
-        let result = rk4_integrator(
-            &integrand,
-            *self.borrow_lower_logk(),
-            *self.borrow_upper_logk(),
-            max_log_k_at_k100,
-        );
-
-        // Return result
+        let intervals = 10*r.clamp(1.0, 10.0) as usize;
+        let mut result = 0.0;
+        // let lower_k = 10_f64.powf(*self.borrow_lower_logk());
+        // let upper_k = 10_f64.powf(*self.borrow_upper_logk());
+        let lower_k = 1e-6/r;
+        let upper_k = 1e4/r;
+        let total_interval = upper_k - lower_k;
+        let subinterval_size = total_interval / intervals as f64;
+        for i in 0..intervals {
+            let interval_lower = lower_k + subinterval_size * i as f64;
+            let interval_upper = lower_k + subinterval_size * i.add(1) as f64;
+            let cf = quadrature::double_exponential::integrate(
+                integrand,
+                interval_lower,
+                interval_upper,
+                *self.borrow_target_error()
+            );
+            // check_integral(&cf);
+            result += cf.integral;
+        }
         prefactor * result
+
+
+        // // 20th of a period, unless r < 1.0.
+        // // dk = 2 * PI / 20 / r
+        // // change to dlog10dk at a particular k
+        // // dlog10k = dk / ln(10) / k
+        // let integrand = |log10k: f64| {
+        //     let k = 10_f64.powf(log10k);
+        //     let jacobian = k * 10_f64.ln();
+        //     k.powi(2) * self.borrow_power_at_k().power(k) * (k * r).sin() / (k * r) * jacobian
+        // };
+        // let max_log_k_at_k100 = 2.0 * PI / 20.0 / r.max(1.0) / 10_f64.ln() / 100.0;
+        // let result = rk4_integrator(
+        //     &integrand,
+        //     *self.borrow_lower_logk(),
+        //     *self.borrow_upper_logk(),
+        //     max_log_k_at_k100,
+        // );
+        // // Return result
+        // prefactor * result
+
+        // let result = bacon_sci::integrate::integrate_simpson(
+        //     10_f64.powf(*self.borrow_lower_logk()),
+        //     10_f64.powf(*self.borrow_upper_logk()),
+        //     &integrand,
+        //     CORR_ABS_ERROR,
+        //     512,
+        // ).unwrap();
+        // prefactor * result
     }
 
     // /// Returns the linear theory correlation function RSD monopole.
@@ -110,7 +132,7 @@ impl CorrelationFunction {
                 (CORR_LOGK_MIN, CORR_LOGK_MAX, CORR_ABS_ERROR)
             }
         };
-  
+
         Ok(
             CorrelationFunctionBuilder {
                 z,
@@ -127,6 +149,7 @@ impl CorrelationFunction {
 #[allow(unused)]
 fn check_integral(cf: &Output) -> Result<(), Box<dyn Error>> {
     // TODO: check integral for convergence, perhaps just print warnings
+    println!("evaluation: {}", cf.num_function_evaluations);
     Ok(())
 }
 
@@ -134,13 +157,13 @@ fn check_integral(cf: &Output) -> Result<(), Box<dyn Error>> {
 /// The parameters required for calculating the 2-point correlation function.
 #[derive(Clone)]
 pub struct CorrelationFunctionParameters {
-    
+
     /// The underlying power spectrum engine
     pub power: PowerSpectrum,
 
     /// Parameters controlling the accuracy of the correlation function
     pub accuracy_params: Option<CorrFuncAccuracyParameters>
-    
+
 }
 
 // Parameters controlling the accuracy of the calculated correlation function.
@@ -164,17 +187,17 @@ mod tests {
         ($x:expr, $y:expr, $d:expr) => {
             // Calculate fractional delta
             let frac_delta = (($x - $y) / $y).abs();
-    
+
             // Compare frac_delta
             let within = frac_delta < $d;
-    
+
             if !within {
                 // Construct err msg
                 let msg = format!(
                     "Result {:.4e} not within {:.4e} of {:.4e}. frac_delta is {:.4e}",
                     $x, $d, $y, frac_delta,
                 );
-    
+
                 // Panic with err msg
                 panic!("{msg}");
             }
@@ -183,11 +206,11 @@ mod tests {
 
     macro_rules! eisenstein_corr(
         ($z:ident, $h0:ident, $om0:ident, $ob0:ident, $t0:ident) => {
-    
+
           concat_idents::concat_idents!(test_name = test_eisen_corr, _, $z, _, $h0, _, $om0, _, $ob0, _, $t0, {
             #[test]
             fn test_name() {
-    
+
                 let z: u32 = stringify!($z)[1..].parse::<u32>().unwrap();
                 let h: u32 = stringify!($h0)[1..].parse::<u32>().unwrap();
                 let om0: u32 = stringify!($om0)[1..].parse::<u32>().unwrap();
@@ -213,24 +236,24 @@ mod tests {
                     z as f64,
                     params
                 ).unwrap();
-    
+
               // Pick scales
               let rs = [0.1, 1.0, 10.0, 100.0];
-    
+
               // Get result at redshift zero
               let result = rs.map(|r| corr.correlation_function(r));
-    
+
               // Expected values, from COLOSSUS
               let expected = {
                 use pyo3::prelude::*;
                 use pyo3::types::*;
                 Python::with_gil(|py| {
-    
+
                   // Get ks into python
                   let list = PyList::new(py, &rs);
                   let locals = PyDict::new(py);
                   locals.set_item("rs", list).unwrap();
-    
+
                   py.run(format!(r#"from colossus.cosmology import cosmology
 import warnings
 warnings.filterwarnings("ignore")
@@ -254,9 +277,11 @@ for r in rs:
                   x
                 })
               };
-    
+
               for i in 0..result.len() {
-                assert_eq_tol!(result[i], expected[i], 6e-2);
+                let abs_diff = (result[i]-expected[i]).abs();
+                let rel_diff = ((result[i]-expected[i])/expected[i]).abs();
+                assert!(abs_diff < 1e-2 || rel_diff < 5e-2, "result {:.3e} has abs_diff = {abs_diff:.3e}; rel_diff = {rel_diff:.3e} wrt expectation {:.3e}", result[i], expected[i]);
               }
             }
           });
