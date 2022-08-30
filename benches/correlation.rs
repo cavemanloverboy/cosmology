@@ -3,8 +3,7 @@
 use std::ops::Sub;
 
 use cosmology::correlation::{CorrelationFunctionParameters, CorrelationFunction};
-use criterion::{Criterion, criterion_group, criterion_main};
-use rand_distr::num_traits::Pow;
+use criterion::{Criterion, criterion_group, criterion_main, black_box};
 
 
 const LOGR_MIN: f64 = 0.0;
@@ -44,7 +43,7 @@ fn bench_corr(c: &mut Criterion) {
     c.bench_function("correlation", move |b| {
         b.iter(|| {
             for r in &rs {
-                correlation_function.correlation_function(*r);
+                black_box(correlation_function.correlation_function(black_box(*r)));
             }
         })
     });
