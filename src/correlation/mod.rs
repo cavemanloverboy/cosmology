@@ -7,9 +7,9 @@ use crate::utils::integration::rk4_integrator;
 
 
 /// Default parameter for the lower k-bound of the correlation function integral
-pub const CORR_LOGK_MIN: f64 = -8.0;
+pub const CORR_LOGK_MIN: f64 = -6.0;
 /// Default parameter for the upper k-bound of the correlation function integral
-pub const CORR_LOGK_MAX: f64 = 8.0;
+pub const CORR_LOGK_MAX: f64 = 6.0;
 /// Default parameter for the abs error of the integrator (very low to maximize num iterations)
 pub const CORR_ABS_ERROR: f64 = 1e-5;
 // /// At r = 100, this gives 1/100th of a period
