@@ -3,13 +3,13 @@ use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64;
 use std::sync::Arc;
 
-struct Data<'a, const D: usize, const P: usize> {
+struct Data<'a, 'b, const D: usize, const P: usize> {
     data: &'a [[f64; D]],
     // bounds: Option<(f64, f64)>,
-    likelihood: Arc<dyn Fn(&[f64; D], &[f64; P]) -> f64 + Send + Sync>,
+    likelihood: Arc<dyn Fn(&[f64; D], &[f64; P]) -> f64 + Send + Sync + 'b>,
 }
 
-impl<const D: usize, const K: usize> Model for Data<'_, D, K> {
+impl<const D: usize, const K: usize> Model for Data<'_, '_, D, K> {
     type Params = [f64; K];
     fn log_prob(&self, params: &Self::Params) -> f64 {
         self.data.iter().map(|d| (self.likelihood)(d, params)).sum()
@@ -18,6 +18,7 @@ impl<const D: usize, const K: usize> Model for Data<'_, D, K> {
 
 pub fn parameter_inference_uniform_prior<
     'a,
+    'b,
     L,
     const D: usize,
     const P: usize,
@@ -31,7 +32,7 @@ pub fn parameter_inference_uniform_prior<
     likelihood: L,
 ) -> [f64; P]
 where
-    L: Fn(&[f64; D], &[f64; P]) -> f64 + Send + Sync + 'static,
+    L: Fn(&[f64; D], &[f64; P]) -> f64 + Send + Sync + 'b,
 {
     // Check bounds
     bounds.iter().enumerate().for_each(|(i, [low, high])| {
@@ -64,6 +65,7 @@ where
 
     // Remove the first burn_in samples from each walker
     println!("chain[..15] = {:?}", &chain[..15]);
+    println!("chain[-15..] = {:?}", &chain.iter().rev().take(15).rev().collect::<Vec<_>>());
     let chain = &chain[W * B..];
 
     // TODO: visualize chain
