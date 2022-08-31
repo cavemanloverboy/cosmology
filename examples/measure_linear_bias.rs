@@ -15,10 +15,40 @@ use rand::{seq::SliceRandom, thread_rng, Rng};
 const REDSHIFT: f64 = 1.0;
 
 fn main() {
-    // 100,000 objects per (1000 Mpc/h)^3
 
-    // Scales of interest
-    // Get Quijote data
+    // Get 1NN measurements from quijote.
+    let (nns, nbar) = get_1nn_quijote_measurements();
+    println!("Calculated NNs. Constructing GRF Theory");
+
+    // Construct Gaussian Random Field Theory at those scales.
+    let real_corr = get_correlation_function();
+    let grf = construct_grf(&real_corr, &nns, nbar);
+    println!("Constructed GRF theory. Carrying out Bayesian inference");
+
+    // Construct likelihood function, bounds on bias parameter's uniform prior
+    let (bounds, loglikelihood) = get_bounds_and_ll(&grf);
+    
+    // Do parameter inference
+    const BURN_IN: usize = 1_000;
+    const WALKERS: usize = 32;
+    const SAMPLES: usize = 10_000;
+    const DATA_DIM: usize = 0; // the data is contained inside grf, owned by loglikelihood
+    const PARAMETERS: usize = 1;
+    let most_likely = {
+        parameter_inference_uniform_prior::<_, DATA_DIM, PARAMETERS, WALKERS, BURN_IN, SAMPLES>(&[[]], &bounds, &loglikelihood)
+    };
+
+    // Plot likelihood
+    plot_likelihood(bounds, &loglikelihood);
+
+    // Plot most likely 1nn
+    plot_likely_1nn(&grf, most_likely, &nns);
+    
+}
+
+
+fn get_1nn_quijote_measurements() -> (Vec<f64>, f64) {
+
     const NDATA: usize = 10_000;
     const QUIJOTE_BOXSIZE: [f64; 3] = [1000.0; 3];
     const N_QUERY: usize = 40_000;
@@ -50,9 +80,12 @@ fn main() {
         nns.push(tree.query_nearest(&query).unwrap().0.sqrt());
     }
     nns.sort_by(|a, b| a.partial_cmp(&b).expect("there should be no NaNs"));
-    let nns = nns; // make immutable
-    println!("Calculated NNs. Constructing GRF Theory");
+    (nns, nbar)
+}
 
+
+fn get_correlation_function<'c>() -> Box<dyn Fn(f64) -> f64 + Send + Sync + 'c> {
+    
     // Initialize E & Hu power spectrum
     // Quijote Cosmology
     let omega_matter_0 = 0.3175;
@@ -75,13 +108,23 @@ fn main() {
     };
     let real_corr = CorrelationFunction::get_correlation_function(REDSHIFT, params).unwrap();
     let real_corr_fn = move |r| real_corr.correlation_function(r);
-    let mode = SpaceMode::RealSpace(&real_corr_fn);
+    Box::new(real_corr_fn)
+}
+fn construct_grf<'b, 'c>(real_corr_fn: &'b Box<dyn Fn(f64) -> f64 + Send + Sync + 'c>, nns: &Vec<f64>, nbar: f64) -> GaussianRandomField<'b, 'c>
+where
+    'b: 'c
+{
+    let mode = SpaceMode::RealSpace(&*real_corr_fn);
     let grf = GaussianRandomField::new(nbar, mode).with(&nns);
-    println!("Constructed GRF theory. Carrying out Bayesian inference");
+    grf
+}
 
-    // Construct likelihood function
-    let bounds = [[0.2, 10.0]];
-    let loglikelihood = |_: &[f64; 0], parameters: &[f64; 1]| -> f64 {
+fn get_bounds_and_ll<'b, 'c>(grf: &'b GaussianRandomField<'b, 'c>) -> ([[f64; 2]; 1], Box<dyn Fn(&[f64; 0], &[f64; 1]) -> f64 + Send + Sync + 'c>)
+where
+    'b: 'c
+{
+    let bounds = [[0.8, 10.0]];
+    let loglikelihood = move |_: &[f64; 0], parameters: &[f64; 1]| -> f64 {
         if parameters[0] < bounds[0][0] || parameters[0] > bounds[0][1] {
             std::f64::NEG_INFINITY
         } else {
@@ -91,17 +134,13 @@ fn main() {
                 .sum()
         }
     };
-    let most_likely = parameter_inference_uniform_prior::<_, 0, 1, 32, 1_000, 10_000>(
-        &[[]],
-        &bounds,
-        &loglikelihood,
-    );
-    println!("{:?}", most_likely);
+    (bounds, Box::new(loglikelihood))
+}
 
-    // Plot likelihood
+fn plot_likelihood(bounds: [[f64; 2]; 1], loglikelihood: &dyn Fn(&[f64; 0], &[f64; 1]) -> f64) {
     let biases: Vec<f64> = (0..100)
-        .map(|i| bounds[0][0] + i as f64 * (bounds[0][1] - bounds[0][0]) / 99.0)
-        .collect();
+    .map(|i| bounds[0][0] + i as f64 * (bounds[0][1] - bounds[0][0]) / 99.0)
+    .collect();
     let lhs: Vec<f64> = biases.iter().map(|b| loglikelihood(&[], &[*b])).collect();
     println!("{lhs:?}");
     let three_fourths = *lhs
@@ -135,12 +174,13 @@ fn main() {
         .unwrap();
 
     root.present().unwrap();
+}
 
-    // Plot most likely 1nn
+fn plot_likely_1nn(grf: &GaussianRandomField, most_likely: [f64; 1], nns: &Vec<f64>) {
     let cdf = grf.get_cdf(1, Some(most_likely[0]));
     let pcdf: Vec<(f64, f64)> = cdf
         .iter()
-        .zip(&nns)
+        .zip(nns)
         .map(|(c, nn)| (*nn, c.min(1.0 - c).clamp(f64::MIN_POSITIVE, 0.5)))
         .collect();
     let pcdf_measurements: Vec<(f64, f64)> = nns
