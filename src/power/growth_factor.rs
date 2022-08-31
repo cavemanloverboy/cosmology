@@ -1,37 +1,24 @@
 use crate::scale_factor::rk4_multi;
 
-
-
 /// Very low to invoke max num of integrator iterations
 const TARGET_ABSOLUTE_ERROR: f64 = 1e-30;
 const DEFAULT_DELTA_SCALE_FACTOR: f64 = 1e-4;
 
 /// Currently implemented only for flat universes with w = -1.
-pub(crate) fn linear_growth_factor(
-    omega_0: f64,
-    omega_de: f64,
-    z: f64
-) -> Result<f64, String> {
-
+pub(crate) fn linear_growth_factor(omega_0: f64, omega_de: f64, z: f64) -> Result<f64, String> {
     // Only flat universe are supported
     validate(omega_0, omega_de)?;
     let omega_r = 1.0 - omega_0 - omega_de;
 
     // Only universes with matter have nonzero linear growth factors
     if contains(omega_0) {
-        
-
         if !contains(omega_de) && !contains(omega_r) {
-
             // If we are in a matter-only universe, then the growth mode is simply a(z)
             Ok((1.0 + z).recip())
-
         } else if contains(omega_de) && !contains(omega_r) {
-
             // If we are in a matter + de universe, then we calculate
             // H(a) * 5 Om / 2 int_0^a da / (a^3 H(a))
             let result = {
-
                 // Friedmann equation with nonzero components
                 // Prefactor of the square root, H0, cancels, so exclude it.
                 let ha = |a: f64| (omega_0 * a.powi(-3) + omega_de).sqrt();
@@ -50,7 +37,7 @@ pub(crate) fn linear_growth_factor(
                     integrand,
                     lower_a,
                     upper_a,
-                    TARGET_ABSOLUTE_ERROR
+                    TARGET_ABSOLUTE_ERROR,
                 );
                 // let result = {
                 //     let mut current_a = lower_a;
@@ -81,20 +68,16 @@ pub(crate) fn linear_growth_factor(
             };
 
             Ok(result)
-
         } else if !contains(omega_de) && contains(omega_r) {
-
             // If we are in a matter + radiation universe, analytic answer exists
             // Taken from Bernardeau et al 2001, which references Peebles & Groth 1975
             let x = omega_0.recip() - 1.0;
-            let result = 1.0 
-                + 3.0 / x 
+            let result = 1.0
+                + 3.0 / x
                 + 3.0 * ((1.0 + x) / x.powi(3)).sqrt() * ((1.0 + x).sqrt() - x.sqrt()).ln();
 
             Ok(result)
-
         } else if contains(omega_de) && contains(omega_r) {
-
             // If we are in a universe with matter, radiation, and de,
             // need explicit integration of the second order ode.
             //
@@ -107,22 +90,23 @@ pub(crate) fn linear_growth_factor(
             let g_prime = |_a: f64, g_and_f: [f64; 2]| g_and_f[1];
             let f_prime = |a: f64, g_and_f: [f64; 2]| {
                 let [g, f] = g_and_f;
-                -(7.0/2.0 - 3.0/2.0 * w(a) / (1.0 + x(a))) * f / a - (1.0 - w(a))/(1.0 + x(a)) * g / a.powi(2)
+                -(7.0 / 2.0 - 3.0 / 2.0 * w(a) / (1.0 + x(a))) * f / a
+                    - (1.0 - w(a)) / (1.0 + x(a)) * g / a.powi(2)
             };
 
             // Package derivative functions
-            let derivatives = |a: f64, g_and_f: [f64; 2]| [g_prime(a, g_and_f), f_prime(a, g_and_f)];
+            let derivatives =
+                |a: f64, g_and_f: [f64; 2]| [g_prime(a, g_and_f), f_prime(a, g_and_f)];
 
             // In the radiation domination era, D ~ 0.
-            // In the early matter domination era, D ~ a. Thus, lim a->0 G(a) = lim a->0 1 -> 1. 
+            // In the early matter domination era, D ~ a. Thus, lim a->0 G(a) = lim a->0 1 -> 1.
             // Consequently, 1' = 0.
             let mut current_g_and_f = [1.0, 0.0];
             let mut current_a = 1e-5;
             let target_a = (1.0 + z).recip();
             while current_a < target_a {
-
                 // Get step size
-                let da = DEFAULT_DELTA_SCALE_FACTOR.min(target_a-current_a);
+                let da = DEFAULT_DELTA_SCALE_FACTOR.min(target_a - current_a);
 
                 // Update functions and independent variable
                 current_g_and_f = rk4_multi(derivatives, current_a, current_g_and_f, da);
@@ -134,34 +118,27 @@ pub(crate) fn linear_growth_factor(
             let growth_factor = final_g * (1.0 + z).recip();
 
             Ok(growth_factor)
-
-        } else { unreachable!("all cases explicitly outlined for clarity") }
+        } else {
+            unreachable!("all cases explicitly outlined for clarity")
+        }
     } else {
-
         // No matter --> no matter overdensity
         Ok(0.0)
     }
-
-
 }
-
-
-
 
 fn contains(a: f64) -> bool {
     a.is_sign_positive() && a.is_normal()
 }
 
 fn validate(omega_0: f64, omega_de: f64) -> Result<(), String> {
-    let is_valid = {
-        omega_0 >= 0.0
-        && omega_de >= 0.0
-        && (omega_0 + omega_de) <= 1.0
-    };
+    let is_valid = { omega_0 >= 0.0 && omega_de >= 0.0 && (omega_0 + omega_de) <= 1.0 };
 
     if is_valid {
         Ok(())
     } else {
-        Err(format!("The specified cosmological parameters are not valid. Only flat universe are supported"))
+        Err(format!(
+            "The specified cosmological parameters are not valid. Only flat universe are supported"
+        ))
     }
 }

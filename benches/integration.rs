@@ -1,18 +1,14 @@
-
-
-
 use std::f64::consts::PI;
 
 use assert_approx_eq::assert_approx_eq;
-use cosmology::correlation::{CorrelationFunctionParameters, CorrelationFunction};
-use criterion::{Criterion, criterion_group, criterion_main, black_box};
+use cosmology::correlation::{CorrelationFunction, CorrelationFunctionParameters};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 const LOGR_MIN: f64 = 0.0;
 const LOGR_MAX: f64 = 2.0;
 const NUM_R_POINTS: usize = 200;
 
 fn bench_1d(c: &mut Criterion) {
-
     let mut group = c.benchmark_group("1D");
 
     // Integrand for half unit circle
@@ -24,7 +20,7 @@ fn bench_1d(c: &mut Criterion) {
                 black_box(half_circle),
                 black_box(-1.0),
                 black_box(1.0),
-                black_box(1e-6)
+                black_box(1e-6),
             ));
             assert_approx_eq!(a.integral, PI / 2.0, a.error_estimate);
         })
@@ -32,14 +28,12 @@ fn bench_1d(c: &mut Criterion) {
 
     group.bench_function("quadrature/double-exponential", move |b| {
         b.iter(|| {
-            let a = black_box(
-                quadrature::double_exponential::integrate(
-                    black_box(half_circle),
-                    black_box(-1.0),
-                    black_box(1.0),
-                    black_box(1e-6)
-                )
-            );
+            let a = black_box(quadrature::double_exponential::integrate(
+                black_box(half_circle),
+                black_box(-1.0),
+                black_box(1.0),
+                black_box(1e-6),
+            ));
             assert_approx_eq!(a.integral, PI / 2.0, a.error_estimate);
         })
     });
@@ -47,21 +41,20 @@ fn bench_1d(c: &mut Criterion) {
     group.bench_function("sequential", move |b| {
         b.iter(|| {
             let a = black_box(
-            sequential_integration::calculate_single_integral_simpson(
+                sequential_integration::calculate_single_integral_simpson(
                     black_box(half_circle),
                     black_box(-1.0),
                     black_box(1.0),
-                    1e-6
-                ).unwrap()
+                    1e-6,
+                )
+                .unwrap(),
             );
             assert_approx_eq!(a, PI / 2.0, 1e-6);
         })
     });
-    
 }
 
 fn bench_2d(c: &mut Criterion) {
-
     let mut group = c.benchmark_group("2D");
 
     // Integrand for half unit sphere
@@ -76,11 +69,12 @@ fn bench_2d(c: &mut Criterion) {
                         black_box(-(1.0 - y.powi(2)).sqrt()),
                         black_box((1.0 - y.powi(2)).sqrt()),
                         1e-6,
-                    ).integral
+                    )
+                    .integral
                 },
                 -1.0,
                 1.0,
-                1e-6
+                1e-6,
             ));
             // We are a little more lenient with this error because we are discarding
             // the error of the internal integral.
@@ -97,19 +91,18 @@ fn bench_2d(c: &mut Criterion) {
                         black_box(-(1.0 - y.powi(2)).sqrt()),
                         black_box((1.0 - y.powi(2)).sqrt()),
                         1e-6,
-                    ).integral
+                    )
+                    .integral
                 },
                 -1.0,
                 1.0,
-                1e-6
+                1e-6,
             ));
             // We are a little more lenient with this error because we are discarding
             // the error of the internal integral.
             assert_approx_eq!(a.integral, 2.0 * PI / 3.0, 1e-6);
         })
     });
-
-
 
     // group.bench_function("sequential", move |b| {
     //     b.iter(|| {
@@ -128,7 +121,6 @@ fn bench_2d(c: &mut Criterion) {
     //     })
     // });
 }
-
 
 criterion_group!(benches, bench_1d, bench_2d);
 criterion_main!(benches);

@@ -12,7 +12,10 @@ struct Data<'a, 'b, const D: usize, const P: usize> {
 impl<const D: usize, const K: usize> Model for Data<'_, '_, D, K> {
     type Params = [f64; K];
     fn log_prob(&self, params: &Self::Params) -> f64 {
-        self.data.iter().map(|d| (self.loglikelihood)(d, params)).sum()
+        self.data
+            .iter()
+            .map(|d| (self.loglikelihood)(d, params))
+            .sum()
     }
 }
 
@@ -65,7 +68,10 @@ where
 
     // Remove the first burn_in samples from each walker
     println!("chain[..15] = {:?}", &chain[..15]);
-    println!("chain[-15..] = {:?}", &chain.iter().rev().take(15).rev().collect::<Vec<_>>());
+    println!(
+        "chain[-15..] = {:?}",
+        &chain.iter().rev().take(15).rev().collect::<Vec<_>>()
+    );
     let chain = &chain[W * B..];
 
     // TODO: visualize chain
@@ -107,7 +113,9 @@ fn test_coin_flip() {
     const BURN_IN: usize = 100;
     const SAMPLES: usize = 1000;
     let params = parameter_inference_uniform_prior::<_, D, P, WALKERS, BURN_IN, SAMPLES>(
-        &data, &bounds, &loglikelihood,
+        &data,
+        &bounds,
+        &loglikelihood,
     );
 
     // Check that param is close to what we expected
@@ -145,7 +153,9 @@ fn test_gaussian() {
     const BURN_IN: usize = 100;
     const SAMPLES: usize = 1000;
     let params = parameter_inference_uniform_prior::<_, D, P, WALKERS, BURN_IN, SAMPLES>(
-        &data, &bounds, &loglikelihood,
+        &data,
+        &bounds,
+        &loglikelihood,
     );
 
     // Check that param is close to what we expected
@@ -181,7 +191,9 @@ fn test_invalid_bound() {
     const BURN_IN: usize = 100;
     const SAMPLES: usize = 1000;
     let params = parameter_inference_uniform_prior::<_, D, P, WALKERS, BURN_IN, SAMPLES>(
-        &data, &bounds, &loglikelihood,
+        &data,
+        &bounds,
+        &loglikelihood,
     );
 
     // Check that param is close to what we expected

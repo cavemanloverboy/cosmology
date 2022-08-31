@@ -1,10 +1,9 @@
-use std::f64::consts::PI;
-use std::error::Error;
-use std::ops::Add;
-use quadrature::Output;
+use crate::power::{PowerFn, PowerSpectrum};
 use ouroboros::self_referencing;
-use crate::power::{PowerSpectrum, PowerFn};
-
+use quadrature::Output;
+use std::error::Error;
+use std::f64::consts::PI;
+use std::ops::Add;
 
 /// Default parameter for the lower k-bound of the correlation function integral
 pub const CORR_LOGK_MIN: f64 = -6.0;
@@ -14,7 +13,6 @@ pub const CORR_LOGK_MAX: f64 = 6.0;
 pub const CORR_ABS_ERROR: f64 = 1e-10;
 // /// At r = 100, this gives 1/100th of a period
 // const MAX_K_STEP: f64 = 2.0 * PI / 100.0 / 100.0;
-
 
 #[self_referencing]
 pub struct CorrelationFunction {
@@ -29,26 +27,19 @@ pub struct CorrelationFunction {
 }
 
 impl CorrelationFunction {
-
     /// Calculates the linear theory correlation function in real-space
-    pub fn correlation_function(
-        &self,
-        r: f64
-    ) -> f64 {
-
+    pub fn correlation_function(&self, r: f64) -> f64 {
         // Define prefactor
         let prefactor = (2.0 * (PI).powi(2)).recip();
 
         // Linear integrand
-        let integrand = |k: f64| {
-            k * self.borrow_power_at_k().power(k) * (k * r).sin() / r
-        };
+        let integrand = |k: f64| k * self.borrow_power_at_k().power(k) * (k * r).sin() / r;
 
         // Carry out integral
         let intervals = r.clamp(1.0, 4.0) as usize;
         let mut result = 0.0;
-        let lower_k = 1e-6/r;
-        let upper_k = 1e4/r;
+        let lower_k = 1e-6 / r;
+        let upper_k = 1e4 / r;
         let total_interval = upper_k - lower_k;
         let subinterval_size = total_interval / intervals as f64;
         for i in 0..intervals {
@@ -58,7 +49,7 @@ impl CorrelationFunction {
                 integrand,
                 interval_lower,
                 interval_upper,
-                *self.borrow_target_error()
+                *self.borrow_target_error(),
             );
             check_integral(&cf);
             result += cf.integral;
@@ -87,30 +78,34 @@ impl CorrelationFunction {
 
     pub fn get_correlation_function(
         z: f64,
-        params: CorrelationFunctionParameters
+        params: CorrelationFunctionParameters,
     ) -> Result<CorrelationFunction, Box<dyn Error>> {
-
         // Specify domain of integration, target error
         let (lower_logk, upper_logk, target_error) = {
             if let Some(ref acc_params) = params.accuracy_params {
                 // User specified bounds, error
-                (acc_params.lower_logk_bound, acc_params.upper_logk_bound, acc_params.target_error)
+                (
+                    acc_params.lower_logk_bound,
+                    acc_params.upper_logk_bound,
+                    acc_params.target_error,
+                )
             } else {
                 // Default parameters if None
                 (CORR_LOGK_MIN, CORR_LOGK_MAX, CORR_ABS_ERROR)
             }
         };
 
-        Ok(
-            CorrelationFunctionBuilder {
-                z,
-                params,
-                lower_logk,
-                upper_logk,
-                target_error,
-                power_at_k_builder: |params: &CorrelationFunctionParameters| params.power.power_fn(z).unwrap()
-            }.build()
-        )
+        Ok(CorrelationFunctionBuilder {
+            z,
+            params,
+            lower_logk,
+            upper_logk,
+            target_error,
+            power_at_k_builder: |params: &CorrelationFunctionParameters| {
+                params.power.power_fn(z).unwrap()
+            },
+        }
+        .build())
     }
 }
 
@@ -121,17 +116,14 @@ fn check_integral(cf: &Output) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-
 /// The parameters required for calculating the 2-point correlation function.
 #[derive(Clone)]
 pub struct CorrelationFunctionParameters {
-
     /// The underlying power spectrum engine
     pub power: PowerSpectrum,
 
     /// Parameters controlling the accuracy of the correlation function
-    pub accuracy_params: Option<CorrFuncAccuracyParameters>
-
+    pub accuracy_params: Option<CorrFuncAccuracyParameters>,
 }
 
 // Parameters controlling the accuracy of the calculated correlation function.
@@ -142,14 +134,12 @@ pub struct CorrFuncAccuracyParameters {
     target_error: f64,
 }
 
-
-
 #[cfg(test)]
 #[cfg(feature = "colossus-python")]
 mod tests {
 
     use super::*;
-    use crate::power::{TransferFunction, PowerSpectrum};
+    use crate::power::{PowerSpectrum, TransferFunction};
 
     macro_rules! assert_eq_tol {
         ($x:expr, $y:expr, $d:expr) => {
@@ -255,7 +245,7 @@ for r in rs:
           });
         }
       );
-      dry::macro_for!($H in [h50, h60, h70, h80, h90, h100] {
+    dry::macro_for!($H in [h50, h60, h70, h80, h90, h100] {
         dry::macro_for!($M in [m10, m30, m50, m70, m90] {
             dry::macro_for!($B in [b1, b2, b3] {
                 dry::macro_for!($T in [t270] {
@@ -266,12 +256,6 @@ for r in rs:
             });
         });
     });
-
-
-
-
-
-
 
     macro_rules! eisenstein_corr_plot(
         ($z:ident, $h0:ident, $om0:ident, $ob0:ident, $t0:ident) => {

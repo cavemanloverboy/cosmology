@@ -1,4 +1,3 @@
+pub mod grf;
 
-pub mod grf;    
-
-pub mod poisson;    
+pub mod poisson;

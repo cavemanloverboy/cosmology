@@ -1,12 +1,8 @@
+use crate::power::growth_factor::linear_growth_factor;
 use quadrature::clenshaw_curtis::integrate;
+use std::error::Error;
 use std::f64::consts::{E as EULER, PI};
 use std::sync::{Arc, RwLock};
-use std::error::Error;
-use crate::power::growth_factor::linear_growth_factor;
-
-
-
-
 
 #[derive(Debug, Clone)]
 pub struct EisensteinHu {
@@ -35,9 +31,6 @@ pub struct EisensteinHu {
     cached_zb_s8_norm: Arc<RwLock<Option<f64>>>,
 }
 
-
-
-
 impl EisensteinHu {
     /// Provide a set of cosmological parameters:
     ///
@@ -47,13 +40,13 @@ impl EisensteinHu {
     /// `temp_cmb0: f64`: Present emperature of CMB
     /// `ns: f64`: Spectral index
     /// `sigma_8: f64`: Power at 8 Mpc/h
-    /// 
+    ///
     /// and get an `EisensteinHu` struct if inputs are valid. This struct has methods to
     /// calculate the power spectrum and transfer functions.
-    /// 
+    ///
     /// ```rust
     /// use cosmology::power::transfer::eisenstein::*;
-    /// 
+    ///
     /// let h = 0.7;
     /// let Om0 = 0.3;
     /// let Omb = 0.025;
@@ -68,12 +61,12 @@ impl EisensteinHu {
     ///     ns,
     ///     s8
     /// ).expect("These are valid cosmo params");
-    /// 
+    ///
     /// let ks = [0.1, 1.0];
     /// let z = 0.0;
     /// let power = eisen_hu.power_z0(&ks);
     /// let power_nb = eisen_hu.power_z0_zero_baryon(&ks);
-    /// 
+    ///
     /// let transfer = ks
     ///     .map(|k| eisen_hu.transfer_baryon(k));
     /// let transfer_nb = ks
@@ -116,16 +109,13 @@ impl EisensteinHu {
     ///
     /// For example usage see [`EisensteinHu`].
     pub fn power_z0(&self, ks: &[f64]) -> Vec<f64> {
-
         // Calculate s8 normalization, or use cached value
         let sigma_8 = self._sigma8_calc_baryon();
 
         // Calculate power at every wavenumber
         ks.iter()
             .map(|&k| {
-                (self.sigma_8 / sigma_8).powi(2)
-                    * self.transfer_baryon(k).powi(2)
-                    * k.powf(self.ns)
+                (self.sigma_8 / sigma_8).powi(2) * self.transfer_baryon(k).powi(2) * k.powf(self.ns)
             })
             .collect::<Vec<_>>()
     }
@@ -140,15 +130,12 @@ impl EisensteinHu {
     /// For example usage see [`EisensteinHu`].
     pub fn power_z(&self, ks: &[f64], z: f64) -> Result<Vec<f64>, Box<dyn Error>> {
         let power_at_z0 = self.power_z0(ks);
-        let growth_factor = linear_growth_factor(
-            self.omega_matter_0,
-            1.0 - self.omega_matter_0,
-            z
-        )?;
+        let growth_factor =
+            linear_growth_factor(self.omega_matter_0, 1.0 - self.omega_matter_0, z)?;
         let growth_factor_norm = linear_growth_factor(
             self.omega_matter_0,
             1.0 - self.omega_matter_0,
-            0.0 // z = 0.0
+            0.0, // z = 0.0
         )?;
         Ok(power_at_z0
             .into_iter()
@@ -159,61 +146,60 @@ impl EisensteinHu {
     /// Packages all the ingredients and returns a `Result` containing an [EisenHuPackage],
     /// containing a boxed closure which calculates the power at k at redshift z.
     pub(crate) fn power_z_at_k_packaged(&self, z: f64) -> Result<EisenHuPackage, Box<dyn Error>> {
-
         // Calculate s8 normalization, or use cached value
         let sigma_8 = self._sigma8_calc_baryon();
 
         // Get growth factor normalization
-        let growth_factor = linear_growth_factor(
-            self.omega_matter_0,
-            1.0 - self.omega_matter_0,
-            z
-        )?;
+        let growth_factor =
+            linear_growth_factor(self.omega_matter_0, 1.0 - self.omega_matter_0, z)?;
         let growth_factor_norm = linear_growth_factor(
             self.omega_matter_0,
             1.0 - self.omega_matter_0,
-            0.0 // z = 0.0
+            0.0, // z = 0.0
         )?;
 
         // Calculate power at every wavenumber
         let power_at_z_at_k = move |k| {
-                (self.sigma_8 / sigma_8).powi(2)
-                    * self.transfer_baryon(k).powi(2)
-                    * k.powf(self.ns)
-                    * (growth_factor / growth_factor_norm).powi(2)
-            };
+            (self.sigma_8 / sigma_8).powi(2)
+                * self.transfer_baryon(k).powi(2)
+                * k.powf(self.ns)
+                * (growth_factor / growth_factor_norm).powi(2)
+        };
 
-        Ok(EisenHuPackage { power: Box::new(power_at_z_at_k) })
+        Ok(EisenHuPackage {
+            power: Box::new(power_at_z_at_k),
+        })
     }
 
     /// Packages all the ingredients and returns a `Result` containing an [EisenHuPackage],
     /// containing a boxed closure which calculates the power at k at redshift z. For the zb model.
-    pub(crate) fn power_z_at_k_packaged_zb(&self, z: f64) -> Result<EisenHuPackage, Box<dyn Error>> {
-
+    pub(crate) fn power_z_at_k_packaged_zb(
+        &self,
+        z: f64,
+    ) -> Result<EisenHuPackage, Box<dyn Error>> {
         // Calculate s8 normalization, or use cached value
         let sigma_8 = self._sigma8_calc_zero_baryon();
 
         // Get growth factor normalization
-        let growth_factor = linear_growth_factor(
-            self.omega_matter_0,
-            1.0 - self.omega_matter_0,
-            z
-        )?;
+        let growth_factor =
+            linear_growth_factor(self.omega_matter_0, 1.0 - self.omega_matter_0, z)?;
         let growth_factor_norm = linear_growth_factor(
             self.omega_matter_0,
             1.0 - self.omega_matter_0,
-            0.0 // z = 0.0
+            0.0, // z = 0.0
         )?;
 
         // Calculate power at every wavenumber
         let power_at_z_at_k = move |k| {
-                (self.sigma_8 / sigma_8).powi(2)
-                    * self.transfer_zero_baryon(k).powi(2)
-                    * k.powf(self.ns)
-                    * (growth_factor / growth_factor_norm).powi(2)
-            };
+            (self.sigma_8 / sigma_8).powi(2)
+                * self.transfer_zero_baryon(k).powi(2)
+                * k.powf(self.ns)
+                * (growth_factor / growth_factor_norm).powi(2)
+        };
 
-        Ok(EisenHuPackage { power: Box::new(power_at_z_at_k) })
+        Ok(EisenHuPackage {
+            power: Box::new(power_at_z_at_k),
+        })
     }
 
     /// Power spectrum for wavenumber k at z = 0 (Eisenstein & Hu 1998).
@@ -223,11 +209,10 @@ impl EisensteinHu {
     ///
     /// Given a slice of wavenumbers `&[T]`, returns the transfer function
     /// with the same units as `k`.
-    /// 
+    ///
     /// API is identical to that of the `power` method. For example usage,
     /// see [`EisensteinHu`].
     pub fn power_z0_zero_baryon(&self, ks: &[f64]) -> Vec<f64> {
-
         // Calculate s8 normalization, or used cached value
         let sigma_8 = self._sigma8_calc_zero_baryon();
 
@@ -243,15 +228,12 @@ impl EisensteinHu {
 
     pub fn power_z_zero_baryon(&self, ks: &[f64], z: f64) -> Result<Vec<f64>, Box<dyn Error>> {
         let power_at_z0 = self.power_z0_zero_baryon(ks);
-        let growth_factor = linear_growth_factor(
-            self.omega_matter_0,
-            1.0 - self.omega_matter_0,
-            z
-        )?;
+        let growth_factor =
+            linear_growth_factor(self.omega_matter_0, 1.0 - self.omega_matter_0, z)?;
         let growth_factor_norm = linear_growth_factor(
             self.omega_matter_0,
             1.0 - self.omega_matter_0,
-            0.0 // z = 0.0
+            0.0, // z = 0.0
         )?;
         Ok(power_at_z0
             .into_iter()
@@ -259,7 +241,7 @@ impl EisensteinHu {
             .collect())
     }
 
-    /// Transfer function, with baryonic effects. 
+    /// Transfer function, with baryonic effects.
     /// For example usage, see [`EisensteinHu`].
     pub fn transfer_baryon(&self, k: f64) -> f64 {
         // Auxilary values
@@ -395,10 +377,8 @@ impl EisensteinHu {
     }
 
     fn _sigma8_calc_baryon(&self) -> f64 {
-
         let read_lock = self.cached_zb_s8_norm.read().unwrap();
         if let Some(cached) = *read_lock {
-
             // Return value if cached
             cached
         } else {
@@ -406,7 +386,6 @@ impl EisensteinHu {
 
             // Otherwise calculate and cache for future use
             *self.cached_s8_norm.write().unwrap() = Some({
-
                 // Calculate sigma squared integral
                 const LOGK_MIN: f64 = -10.0;
                 const LOGK_MAX: f64 = 10.0;
@@ -414,8 +393,10 @@ impl EisensteinHu {
                 let sigma_2: f64 = (0..SUB_INTERVALS)
                     .map(|i| {
                         // Interval bounds
-                        let min = LOGK_MIN + i as f64 * (LOGK_MAX - LOGK_MIN) / SUB_INTERVALS as f64;
-                        let max = LOGK_MIN + (i + 1) as f64 * (LOGK_MAX - LOGK_MIN) / SUB_INTERVALS as f64;
+                        let min =
+                            LOGK_MIN + i as f64 * (LOGK_MAX - LOGK_MIN) / SUB_INTERVALS as f64;
+                        let max = LOGK_MIN
+                            + (i + 1) as f64 * (LOGK_MAX - LOGK_MIN) / SUB_INTERVALS as f64;
 
                         // Integrate over this sub_interval
                         let integ = integrate(
@@ -438,10 +419,8 @@ impl EisensteinHu {
     }
 
     fn _sigma8_calc_zero_baryon(&self) -> f64 {
-
         let read_lock = self.cached_zb_s8_norm.read().unwrap();
         if let Some(cached) = *read_lock {
-
             // Return value if cached
             cached
         } else {
@@ -456,8 +435,10 @@ impl EisensteinHu {
                 let sigma_2: f64 = (0..SUB_INTERVALS)
                     .map(|i| {
                         // Interval bounds
-                        let min = LOGK_MIN + i as f64 * (LOGK_MAX - LOGK_MIN) / SUB_INTERVALS as f64;
-                        let max = LOGK_MIN + (i + 1) as f64 * (LOGK_MAX - LOGK_MIN) / SUB_INTERVALS as f64;
+                        let min =
+                            LOGK_MIN + i as f64 * (LOGK_MAX - LOGK_MIN) / SUB_INTERVALS as f64;
+                        let max = LOGK_MIN
+                            + (i + 1) as f64 * (LOGK_MAX - LOGK_MIN) / SUB_INTERVALS as f64;
 
                         // Integrate over this sub_interval
                         let integ = integrate(
@@ -754,7 +735,7 @@ mod tests {
 #[cfg(test)]
 #[cfg(feature = "colossus-python")]
 /// This set of unit tests directly uses the colossus package to test
-/// a larger subset of cosmological parameter space. This crate was 
+/// a larger subset of cosmological parameter space. This crate was
 /// originally tested with colossus==1.3.1
 mod tests {
 
@@ -818,7 +799,7 @@ for k in ks:
     });
   });
 
-  macro_rules! eisenstein_power_baryon_test(
+    macro_rules! eisenstein_power_baryon_test(
     ($h0:ident, $om0:ident, $ob0:ident, $z0:ident) => {
 
       concat_idents::concat_idents!(test_name = test_eisen_hu_transfer_, $h0, _, $om0, _, $ob0, _, $t0, {
@@ -1103,7 +1084,6 @@ for k in ks:
             });
         });
     });
-
 
     dry::macro_for!($H in [h50, h60, h70, h80, h90, h100] {
         dry::macro_for!($M in [m10, m30, m50, m70, m90, m100] {
