@@ -1,13 +1,13 @@
-use crate::scale_factor::{rk4_multi, rk4};
+use crate::scale_factor::rk4_multi;
 
 
 
-const TARGET_ABSOLUTE_ERROR: f64 = 1e-10;
+/// Very low to invoke max num of integrator iterations
+const TARGET_ABSOLUTE_ERROR: f64 = 1e-30;
 const DEFAULT_DELTA_SCALE_FACTOR: f64 = 1e-4;
 
 /// Currently implemented only for flat universes with w = -1.
 pub(crate) fn linear_growth_factor(
-    h: f64,
     omega_0: f64,
     omega_de: f64,
     z: f64
