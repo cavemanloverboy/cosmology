@@ -8,15 +8,15 @@ use cosmology::{
     nn::{grf::{SpaceMode, GaussianRandomField}, poisson::PoissonRandomField},
 };
 
-const REDSHIFT: f64 = 3.0;
+const REDSHIFT: f64 = 1.0;
 const MIN_LOGR: f64 = 0.0;
 const MAX_LOGR: f64 = 2.0;
-const NUM_R_POINTS: usize = 1000;
+const NUM_R_POINTS: usize = 200;
 
 fn main() {
 
     // 100,000 objects per (1000 Mpc/h)^3
-    let nbar = 1e5 / 1e3_f64.powi(3);
+    let nbar = 1e4 / 1e3_f64.powi(3);
 
     // Scales of interest
     let scales: Vec<f64> = (0..NUM_R_POINTS)

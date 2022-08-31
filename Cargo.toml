@@ -24,8 +24,8 @@ rand = { version = "0.8.5", optional = true }
 rand_pcg = { version = "0.3.1", optional = true }
 criterion = "0.3.6"
 ouroboros = "0.15.3"
-sequential-integration = "1.0.2"
 rayon = "1.5.3"
+indicatif = "0.17.0"
 
 # Optional testing dependency!
 # We used colossus==1.3.1 for testing
@@ -35,6 +35,8 @@ features = ["auto-initialize"]
 optional = true
 
 [dev-dependencies]
+itertools = "0.10.3"
+sequential-integration = "1.0.2"
 plotters = "0.3.1"
 fnntw = "0.2.3"
 ndarray-npy = "0.8.1"
