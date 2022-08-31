@@ -317,7 +317,7 @@ fn spherical_pair_weight_function_dv(
     s: f64,
     r: f64,
 ) -> f64 {
-    (2.0*PI*(-2.0*r + s).powi(2) - 2.0*PI*(-2.0*r + s)*(4.0*r + s))/(4.0*PI*r.powi(2))
+    ((PI*(-2.0*r + s).powi(2))/3. - (PI*(-2.0*r + s)*(4.0*r + s))/3.)/(4.*PI*r.powi(2))
 }
 
 
