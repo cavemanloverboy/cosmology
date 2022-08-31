@@ -94,12 +94,14 @@ impl<'b, 'c> GaussianRandomField<'b,'c> {
         rs: &[f64]
     ) -> Self {
 
+        let bar = indicatif::ProgressBar::new(rs.len() as u64);
+
         self.container = rs
             .into_par_iter()
-            .map_with(&self, |s, r| {
-                (*r, s.calculate_i(*r), s.calculate_didv(*r))
+            .inspect(|_| bar.inc(1))
+            .map(|r| {
+                (*r, self.calculate_i(*r), self.calculate_didv(*r))
             })
-            .inspect(|(r, i, didv)| println!("{r} {i} {didv}"))
             .collect();
 
         self
