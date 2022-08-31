@@ -6,13 +6,13 @@ use std::sync::Arc;
 struct Data<'a, 'b, const D: usize, const P: usize> {
     data: &'a [[f64; D]],
     // bounds: Option<(f64, f64)>,
-    likelihood: Arc<dyn Fn(&[f64; D], &[f64; P]) -> f64 + Send + Sync + 'b>,
+    loglikelihood: Arc<dyn Fn(&[f64; D], &[f64; P]) -> f64 + Send + Sync + 'b>,
 }
 
 impl<const D: usize, const K: usize> Model for Data<'_, '_, D, K> {
     type Params = [f64; K];
     fn log_prob(&self, params: &Self::Params) -> f64 {
-        self.data.iter().map(|d| (self.likelihood)(d, params)).sum()
+        self.data.iter().map(|d| (self.loglikelihood)(d, params)).sum()
     }
 }
 
@@ -29,7 +29,7 @@ pub fn parameter_inference_uniform_prior<
     data: &'a [[f64; D]],
     // TODO: bounds check
     bounds: &[[f64; 2]; P],
-    likelihood: L,
+    loglikelihood: &L,
 ) -> [f64; P]
 where
     L: Fn(&[f64; D], &[f64; P]) -> f64 + Send + Sync + 'b,
@@ -45,7 +45,7 @@ where
     // Initialize helper struct
     let data = Data {
         data,
-        likelihood: Arc::new(likelihood),
+        loglikelihood: Arc::new(loglikelihood),
     };
 
     // Initialize walkers iter
@@ -87,7 +87,7 @@ fn test_coin_flip() {
     // First define bernoulli
     const P: usize = 1;
     const D: usize = 1;
-    let likelihood = |x: &[f64; D], p: &[f64; P]| {
+    let loglikelihood = |x: &[f64; D], p: &[f64; P]| {
         if x[0] == 1.0 {
             p[0].ln()
         } else if x[0] == 0.0 {
@@ -107,7 +107,7 @@ fn test_coin_flip() {
     const BURN_IN: usize = 100;
     const SAMPLES: usize = 1000;
     let params = parameter_inference_uniform_prior::<_, D, P, WALKERS, BURN_IN, SAMPLES>(
-        &data, &bounds, likelihood,
+        &data, &bounds, &loglikelihood,
     );
 
     // Check that param is close to what we expected
@@ -122,7 +122,7 @@ fn test_gaussian() {
     // First define gaussian
     const P: usize = 2;
     const D: usize = 1;
-    let likelihood = |x: &[f64; 1], p: &[f64; P]| {
+    let loglikelihood = |x: &[f64; 1], p: &[f64; P]| {
         if p[1] < 0.0 {
             return std::f64::NEG_INFINITY;
         } else {
@@ -145,7 +145,7 @@ fn test_gaussian() {
     const BURN_IN: usize = 100;
     const SAMPLES: usize = 1000;
     let params = parameter_inference_uniform_prior::<_, D, P, WALKERS, BURN_IN, SAMPLES>(
-        &data, &bounds, likelihood,
+        &data, &bounds, &loglikelihood,
     );
 
     // Check that param is close to what we expected
@@ -161,7 +161,7 @@ fn test_invalid_bound() {
     // First define bernoulli
     const P: usize = 1;
     const D: usize = 1;
-    let likelihood = |x: &[f64; 1], p: &[f64; P]| {
+    let loglikelihood = |x: &[f64; 1], p: &[f64; P]| {
         if x[0] == 1.0 {
             p[0].ln()
         } else if x[0] == 0.0 {
@@ -181,7 +181,7 @@ fn test_invalid_bound() {
     const BURN_IN: usize = 100;
     const SAMPLES: usize = 1000;
     let params = parameter_inference_uniform_prior::<_, D, P, WALKERS, BURN_IN, SAMPLES>(
-        &data, &bounds, likelihood,
+        &data, &bounds, &loglikelihood,
     );
 
     // Check that param is close to what we expected
