@@ -1,10 +1,9 @@
 use std::f64::consts::PI;
 use std::error::Error;
-use std::ops::{Add, Sub};
+use std::ops::Add;
 use quadrature::Output;
 use ouroboros::self_referencing;
 use crate::power::{PowerSpectrum, PowerFn};
-use crate::utils::integration::rk4_integrator;
 
 
 /// Default parameter for the lower k-bound of the correlation function integral
@@ -12,7 +11,7 @@ pub const CORR_LOGK_MIN: f64 = -6.0;
 /// Default parameter for the upper k-bound of the correlation function integral
 pub const CORR_LOGK_MAX: f64 = 6.0;
 /// Default parameter for the abs error of the integrator
-pub const CORR_ABS_ERROR: f64 = 1e-6;
+pub const CORR_ABS_ERROR: f64 = 1e-10;
 // /// At r = 100, this gives 1/100th of a period
 // const MAX_K_STEP: f64 = 2.0 * PI / 100.0 / 100.0;
 
@@ -46,10 +45,8 @@ impl CorrelationFunction {
         };
 
         // Carry out integral
-        let intervals = 10*r.clamp(1.0, 10.0) as usize;
+        let intervals = r.clamp(1.0, 4.0) as usize;
         let mut result = 0.0;
-        // let lower_k = 10_f64.powf(*self.borrow_lower_logk());
-        // let upper_k = 10_f64.powf(*self.borrow_upper_logk());
         let lower_k = 1e-6/r;
         let upper_k = 1e4/r;
         let total_interval = upper_k - lower_k;
@@ -63,39 +60,10 @@ impl CorrelationFunction {
                 interval_upper,
                 *self.borrow_target_error()
             );
-            // check_integral(&cf);
+            check_integral(&cf);
             result += cf.integral;
         }
         prefactor * result
-
-
-        // // 20th of a period, unless r < 1.0.
-        // // dk = 2 * PI / 20 / r
-        // // change to dlog10dk at a particular k
-        // // dlog10k = dk / ln(10) / k
-        // let integrand = |log10k: f64| {
-        //     let k = 10_f64.powf(log10k);
-        //     let jacobian = k * 10_f64.ln();
-        //     k.powi(2) * self.borrow_power_at_k().power(k) * (k * r).sin() / (k * r) * jacobian
-        // };
-        // let max_log_k_at_k100 = 2.0 * PI / 20.0 / r.max(1.0) / 10_f64.ln() / 100.0;
-        // let result = rk4_integrator(
-        //     &integrand,
-        //     *self.borrow_lower_logk(),
-        //     *self.borrow_upper_logk(),
-        //     max_log_k_at_k100,
-        // );
-        // // Return result
-        // prefactor * result
-
-        // let result = bacon_sci::integrate::integrate_simpson(
-        //     10_f64.powf(*self.borrow_lower_logk()),
-        //     10_f64.powf(*self.borrow_upper_logk()),
-        //     &integrand,
-        //     CORR_ABS_ERROR,
-        //     512,
-        // ).unwrap();
-        // prefactor * result
     }
 
     // /// Returns the linear theory correlation function RSD monopole.
@@ -149,7 +117,7 @@ impl CorrelationFunction {
 #[allow(unused)]
 fn check_integral(cf: &Output) -> Result<(), Box<dyn Error>> {
     // TODO: check integral for convergence, perhaps just print warnings
-    println!("evaluation: {}", cf.num_function_evaluations);
+    // println!("evaluation: {}", cf.num_function_evaluations);
     Ok(())
 }
 
@@ -298,4 +266,94 @@ for r in rs:
             });
         });
     });
+
+
+
+
+
+
+
+    macro_rules! eisenstein_corr_plot(
+        ($z:ident, $h0:ident, $om0:ident, $ob0:ident, $t0:ident) => {
+
+          concat_idents::concat_idents!(test_name = test_eisen_corr, _, $z, _, $h0, _, $om0, _, $ob0, _, $t0, {
+            #[test]
+            fn test_name() {
+
+                let z: u32 = stringify!($z)[1..].parse::<u32>().unwrap();
+                let h: u32 = stringify!($h0)[1..].parse::<u32>().unwrap();
+                let om0: u32 = stringify!($om0)[1..].parse::<u32>().unwrap();
+                let ob0: u32 = stringify!($ob0)[1..].parse::<u32>().unwrap();
+                let t0: u32 = stringify!($t0)[1..].parse::<u32>().unwrap();
+
+                // Construct EisensteinHu model
+                let power = PowerSpectrum::new(TransferFunction::EisensteinHu {
+                    h: h as f64 / 100.0, // h
+                    omega_matter_0: om0 as f64 / 100.0, // omega_matter_0
+                    omega_baryon_0: ob0 as f64 / 100.0, // omega_baryon_0
+                    temp_cmb0: t0 as f64 / 100.0, // temp_cmb_0
+                    ns: 0.9665, // ns
+                    sigma_8: 0.8102, // sigma8
+                }).unwrap();
+
+                // Construct correlation function
+                let params = CorrelationFunctionParameters {
+                    power,
+                    accuracy_params: None, // default accuracy parameters
+                };
+                let corr = CorrelationFunction::get_correlation_function(
+                    z as f64,
+                    params
+                ).unwrap();
+
+              // Pick scales
+              let rs = [0.1, 1.0, 10.0, 100.0];
+
+              // Get result at redshift zero
+              let result = rs.map(|r| corr.correlation_function(r));
+
+              // Expected values, from COLOSSUS
+              let expected = {
+                use pyo3::prelude::*;
+                use pyo3::types::*;
+                Python::with_gil(|py| {
+
+                  // Get ks into python
+                  let list = PyList::new(py, &rs);
+                  let locals = PyDict::new(py);
+                  locals.set_item("rs", list).unwrap();
+
+                  py.run(format!(r#"from colossus.cosmology import cosmology
+import warnings
+warnings.filterwarnings("ignore")
+planck18 = cosmology.setCosmology("planck18")
+params = {{
+    "H0": {0},
+    "Om0": {1},
+    "Ob0": {2},
+    "Tcmb0": {3},
+    "ns": 0.9665,
+    "sigma8": 0.8102,
+}}
+cosmology.addCosmology("test", params=params)
+cosmo = cosmology.setCosmology("test")
+x = []
+for r in rs:
+    x.append(cosmo.correlationFunction(r, z={4}))
+                  "#, h as f64, om0 as f64 / 100.0, ob0 as f64 / 100.0,
+                  t0 as f64 / 100.0, z).as_str(), None, Some(locals)).unwrap();
+                  let x: Vec<_> = locals.get_item("x").unwrap().extract::<Vec<f64>>().unwrap();
+                  x
+                })
+              };
+
+              for i in 0..result.len() {
+                let abs_diff = (result[i]-expected[i]).abs();
+                let rel_diff = ((result[i]-expected[i])/expected[i]).abs();
+                assert!(abs_diff < 1e-2 || rel_diff < 5e-2, "result {:.3e} has abs_diff = {abs_diff:.3e}; rel_diff = {rel_diff:.3e} wrt expectation {:.3e}", result[i], expected[i]);
+              }
+            }
+          });
+        }
+      );
 }
