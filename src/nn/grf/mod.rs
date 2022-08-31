@@ -1,7 +1,7 @@
 use std::f64::consts::PI;
 
 use quadrature::Output;
-use rayon::prelude::IntoParallelIterator;
+use rayon::prelude::{IntoParallelIterator, IndexedParallelIterator};
 use rayon::iter::ParallelIterator;
 
 use crate::utils::integration::{two_dimensional_integral_const_inner_bounds};
@@ -9,7 +9,8 @@ use crate::utils::integration::{two_dimensional_integral_const_inner_bounds};
 use self::{cdf::calculate_grf_cdf, pdf::calculate_grf_pdf};
 
 
-const GRF_INTEGRATION_TARGET_ERROR: f64 = 1e-6;
+// Very low to invoke max num of integrator iterations
+const GRF_INTEGRATION_TARGET_ERROR: f64 = 1e-20;
 
 /// These are in separate modules because they are massive and are
 /// stressing VS code being open on a 48 core, 256 GB RAM machine...
