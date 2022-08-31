@@ -141,13 +141,11 @@ impl EisensteinHu {
     pub fn power_z(&self, ks: &[f64], z: f64) -> Result<Vec<f64>, Box<dyn Error>> {
         let power_at_z0 = self.power_z0(ks);
         let growth_factor = linear_growth_factor(
-            self.h,
             self.omega_matter_0,
             1.0 - self.omega_matter_0,
             z
         )?;
         let growth_factor_norm = linear_growth_factor(
-            self.h,
             self.omega_matter_0,
             1.0 - self.omega_matter_0,
             0.0 // z = 0.0
@@ -167,13 +165,11 @@ impl EisensteinHu {
 
         // Get growth factor normalization
         let growth_factor = linear_growth_factor(
-            self.h,
             self.omega_matter_0,
             1.0 - self.omega_matter_0,
             z
         )?;
         let growth_factor_norm = linear_growth_factor(
-            self.h,
             self.omega_matter_0,
             1.0 - self.omega_matter_0,
             0.0 // z = 0.0
@@ -199,13 +195,11 @@ impl EisensteinHu {
 
         // Get growth factor normalization
         let growth_factor = linear_growth_factor(
-            self.h,
             self.omega_matter_0,
             1.0 - self.omega_matter_0,
             z
         )?;
         let growth_factor_norm = linear_growth_factor(
-            self.h,
             self.omega_matter_0,
             1.0 - self.omega_matter_0,
             0.0 // z = 0.0
@@ -250,13 +244,11 @@ impl EisensteinHu {
     pub fn power_z_zero_baryon(&self, ks: &[f64], z: f64) -> Result<Vec<f64>, Box<dyn Error>> {
         let power_at_z0 = self.power_z0_zero_baryon(ks);
         let growth_factor = linear_growth_factor(
-            self.h,
             self.omega_matter_0,
             1.0 - self.omega_matter_0,
             z
         )?;
         let growth_factor_norm = linear_growth_factor(
-            self.h,
             self.omega_matter_0,
             1.0 - self.omega_matter_0,
             0.0 // z = 0.0
