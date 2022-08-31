@@ -1,4 +1,4 @@
-
+use std::f64::consts::PI;
 
 
 pub(super) fn calculate_grf_pdf(
@@ -12,7 +12,13 @@ pub(super) fn calculate_grf_pdf(
     // Convert distance to corresponding spherical volume
     let v = 4.0 * std::f64::consts::PI * r.powi(3) / 3.0;
 
-    match k {
+    // int P(V) dV = 1
+    // int P(V(R)) * dR dV/dR = 1
+    // ----> P(R) = dV/dR * P(V)
+    // ----> P(R) = 4 * PI * R^2 * dCDF(V)/dV
+    let jacobian = 4.0 * PI * r.powi(2);
+
+    jacobian * match k {
 
          1 => -exp(0.5*i*nbar.powi(2) - nbar*v)*(-nbar + 0.5*nbar.powi(2)*didv),
          2 => -exp(0.5*i*nbar.powi(2) - nbar*v)*(nbar - nbar.powi(2)*didv) - exp(0.5*i*nbar.powi(2) - nbar*v)*(-nbar + 0.5*nbar.powi(2)*didv) - exp(0.5*i*nbar.powi(2) - nbar*v)*(-i*nbar.powi(2) + nbar*v)*(-nbar + 0.5*nbar.powi(2)*didv),
@@ -35,7 +41,7 @@ pub(super) fn calculate_grf_pdf(
          _ => todo!("only k=1 through k=16 NN PDFs are implemented for the Gaussian Random Fields"),
 
 
-    }
+    }.max(f64::MIN_POSITIVE)
 }
 
 /// This is just here to simplify the conversion from mathematica output

@@ -1,5 +1,5 @@
 
-
+use std::f64::consts::PI;
 
 fn calculate_poisson_pdf(
     r: f64,
@@ -10,7 +10,13 @@ fn calculate_poisson_pdf(
     // Convert distance to corresponding spherical volume
     let v = 4.0 * std::f64::consts::PI * r.powi(3) / 3.0;
 
-    match k {
+    // int P(V) dV = 1
+    // int P(V(R)) * dR dV/dR = 1
+    // ----> P(R) = dV/dR * P(V)
+    // ----> P(R) = 4 * PI * R^2 * dCDF(V)/dV
+    let jacobian = 4.0 * PI * r.powi(2);
+
+    jacobian * match k {
 
          1 => nbar/exp(nbar*v),
          2 => (-1.*nbar + exp(nbar*v)*nbar)/exp(nbar*v) - (nbar*(-1. + exp(nbar*v) - 1.*nbar*v))/exp(nbar*v),
