@@ -85,7 +85,6 @@ impl PoissonRandomField {
         self.container
             .iter()
             .enumerate()
-            .inspect(|(j, _)| println!("element {j}"))
             .map(|(_, r)| {
                 calculate_poisson_cdf(
                     *r, 
