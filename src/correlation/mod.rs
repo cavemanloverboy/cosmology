@@ -110,10 +110,9 @@ impl CorrelationFunction {
 }
 
 #[allow(unused)]
-fn check_integral(cf: &Output) -> Result<(), Box<dyn Error>> {
+fn check_integral(cf: &Output){
     // TODO: check integral for convergence, perhaps just print warnings
     // println!("evaluation: {}", cf.num_function_evaluations);
-    Ok(())
 }
 
 /// The parameters required for calculating the 2-point correlation function.

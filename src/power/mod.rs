@@ -1,6 +1,4 @@
-use transfer::eisenstein::{self, *};
-
-use self::growth_factor::linear_growth_factor;
+use transfer::eisenstein::*;
 
 pub mod growth_factor;
 pub mod transfer;
@@ -89,12 +87,12 @@ impl PowerSpectrum {
             // Eistenstein & Hu 1998
             TransferFunctionEngine::EisensteinHu(e_hu_engine) => e_hu_engine
                 .power_z_at_k_packaged(z)
-                .map(move |pkg| PowerFn::EisensteinHu(pkg)),
+                .map(PowerFn::EisensteinHu),
 
             // Eistenstein & Hu 1998 (zero baryon, i.e. no BAO)
             TransferFunctionEngine::EisensteinHuNoBaryon(e_hu_engine) => e_hu_engine
                 .power_z_at_k_packaged_zb(z)
-                .map(move |pkg| PowerFn::EisensteinHuNoBaryon(pkg)),
+                .map(PowerFn::EisensteinHuNoBaryon),
         }
     }
 }

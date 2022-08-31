@@ -2,9 +2,7 @@ use std::f64::consts::PI;
 
 use quadrature::Output;
 use rayon::iter::ParallelIterator;
-use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator};
-
-use crate::utils::integration::two_dimensional_integral_const_inner_bounds;
+use rayon::prelude::IntoParallelIterator;
 
 use self::{cdf::calculate_grf_cdf, pdf::calculate_grf_pdf};
 
@@ -45,7 +43,6 @@ type TwoPointIntegral = f64;
 type TwoPointIntegralDerivative = TwoPointIntegral;
 
 type Radius = f64;
-type Angle = f64;
 
 /// Specify what space to calculate the kNN CDFs for,
 /// either [SpaceMode::RealSpace] or [SpaceMode::RedshiftSpace].
@@ -260,6 +257,7 @@ impl<'b, 'c> GaussianRandomField<'b, 'c> {
     }
 }
 
+#[allow(unused)]
 fn check_integral(integral: &Output) {
     // TODO
 }

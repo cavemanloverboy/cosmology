@@ -1,5 +1,6 @@
 use std::f64::consts::PI;
 
+#[allow(unused)]
 fn calculate_poisson_pdf(r: f64, nbar: f64, k: u8) -> f64 {
     // Convert distance to corresponding spherical volume
     let v = 4.0 * std::f64::consts::PI * r.powi(3) / 3.0;
@@ -375,6 +376,7 @@ fn calculate_poisson_pdf(r: f64, nbar: f64, k: u8) -> f64 {
 /// This is just here to simplify the conversion from mathematica output
 /// as simply as possible, i.e. without any regex (or similar) manipulation.
 #[inline(always)]
+#[allow(unused)]
 fn exp(x: f64) -> f64 {
     x.exp()
 }

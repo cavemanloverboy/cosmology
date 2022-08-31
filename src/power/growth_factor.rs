@@ -137,8 +137,6 @@ fn validate(omega_0: f64, omega_de: f64) -> Result<(), String> {
     if is_valid {
         Ok(())
     } else {
-        Err(format!(
-            "The specified cosmological parameters are not valid. Only flat universe are supported"
-        ))
+        Err("The specified cosmological parameters are not valid. Only flat universe are supported".to_string())
     }
 }

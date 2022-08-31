@@ -3,10 +3,11 @@ use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64;
 use std::sync::Arc;
 
+type LogLikelihood<'b,const D: usize, const P: usize> = dyn Fn(&[f64; D], &[f64; P]) -> f64 + Send + Sync + 'b;
 struct Data<'a, 'b, const D: usize, const P: usize> {
     data: &'a [[f64; D]],
     // bounds: Option<(f64, f64)>,
-    loglikelihood: Arc<dyn Fn(&[f64; D], &[f64; P]) -> f64 + Send + Sync + 'b>,
+    loglikelihood: Arc<LogLikelihood<'b,D,P>>,
 }
 
 impl<const D: usize, const K: usize> Model for Data<'_, '_, D, K> {
