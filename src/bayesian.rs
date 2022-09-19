@@ -34,7 +34,7 @@ pub fn parameter_inference_uniform_prior<
     // TODO: bounds check
     bounds: &[[f64; 2]; P],
     loglikelihood: &L,
-) -> [f64; P]
+) -> ([f64; P], Vec<[f64; P]>)
 where
     L: Fn(&[f64; D], &[f64; P]) -> f64 + Send + Sync + 'b,
 {
@@ -65,7 +65,7 @@ where
         (p, rng)
     });
 
-    let (chain, _accepted) = sample(&data, walkers, S, &Parallel);
+    let (mut chain, _accepted) = sample(&data, walkers, S, &Parallel);
 
     // Remove the first burn_in samples from each walker
     println!("chain[..15] = {:?}", &chain[..15]);
@@ -73,18 +73,16 @@ where
         "chain[-15..] = {:?}",
         &chain.iter().rev().take(15).rev().collect::<Vec<_>>()
     );
-    let chain = &chain[W * B..];
-
-    // TODO: visualize chain
+    let chain: Vec<[f64; P]> = chain.drain(W * B..).collect();
 
     let norm = chain.len() as f64;
-    chain
+    (chain
         .iter()
         .fold([0.0; P], |mut acc, p| {
             acc.iter_mut().enumerate().for_each(|(i, a)| *a += p[i]);
             acc
         })
-        .map(|p| p / norm)
+        .map(|p| p / norm), chain)
 }
 
 #[test]
@@ -113,7 +111,7 @@ fn test_coin_flip() {
     const WALKERS: usize = 32;
     const BURN_IN: usize = 100;
     const SAMPLES: usize = 1000;
-    let params = parameter_inference_uniform_prior::<_, D, P, WALKERS, BURN_IN, SAMPLES>(
+    let (params, _chain) = parameter_inference_uniform_prior::<_, D, P, WALKERS, BURN_IN, SAMPLES>(
         &data,
         &bounds,
         &loglikelihood,
@@ -153,7 +151,7 @@ fn test_gaussian() {
     const WALKERS: usize = 64;
     const BURN_IN: usize = 100;
     const SAMPLES: usize = 1000;
-    let params = parameter_inference_uniform_prior::<_, D, P, WALKERS, BURN_IN, SAMPLES>(
+    let (params, _chain) = parameter_inference_uniform_prior::<_, D, P, WALKERS, BURN_IN, SAMPLES>(
         &data,
         &bounds,
         &loglikelihood,
@@ -191,7 +189,7 @@ fn test_invalid_bound() {
     const WALKERS: usize = 32;
     const BURN_IN: usize = 100;
     const SAMPLES: usize = 1000;
-    let params = parameter_inference_uniform_prior::<_, D, P, WALKERS, BURN_IN, SAMPLES>(
+    let (params, _chain) = parameter_inference_uniform_prior::<_, D, P, WALKERS, BURN_IN, SAMPLES>(
         &data,
         &bounds,
         &loglikelihood,
