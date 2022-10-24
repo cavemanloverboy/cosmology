@@ -2,6 +2,7 @@ type Time = f64;
 
 /// The primary, user-facing struct containing the state of the scale factor,
 /// cosmological parameters, and the integrator configuration.
+#[derive(Clone)]
 pub struct ScaleFactor {
     /// Cosmological parameters for this universe
     params: CosmologicalParameters,
@@ -19,6 +20,7 @@ pub const LITTLE_H_TO_BIG_H: f64 = 1.022e-4;
 
 /// This contains all of present day values of the cosmological parameters
 /// relevant to the evolution of the scale factor, as per the Friedmann Equations.
+#[derive(Clone)]
 pub struct CosmologicalParameters {
     /// Present day value of Ω_m0, the matter content of the universe
     pub omega_m0: f64,
@@ -42,6 +44,7 @@ pub struct CosmologicalParameters {
 
 /// A struct containing the state of the universe. This includes the scale factor,
 /// its derivetive, and the current time.
+#[derive(Clone)]
 struct ScaleFactorState {
     /// scale factor
     a: f64,
@@ -54,6 +57,7 @@ struct ScaleFactorState {
 }
 
 /// A struct containing parameters about the integrator
+#[derive(Clone)]
 struct IntegratorConfig {
     max_dloga: f64,
 }
