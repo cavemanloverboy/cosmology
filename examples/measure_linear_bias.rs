@@ -1,6 +1,7 @@
 use itertools::Itertools;
-use ndarray::{Array2, Axis};
+use ::ndarray::{Array2, Axis};
 use ndarray_npy::NpzReader;
+use plotly::{*, common::{Title, Font}};
 use plotters::prelude::*;
 use std::ops::Sub;
 
@@ -15,13 +16,43 @@ use rand::{seq::SliceRandom, thread_rng, Rng};
 const REDSHIFT: f64 = 1.0;
 
 fn main() {
-    // 100,000 objects per (1000 Mpc/h)^3
 
-    // Scales of interest
-    // Get Quijote data
+    // Get 1NN measurements from quijote.
+    let (nns, nbar) = get_1nn_quijote_measurements();
+    println!("Calculated NNs. Constructing GRF Theory");
+
+    // Construct Gaussian Random Field Theory at those scales.
+    let real_corr = get_correlation_function();
+    let grf = construct_grf(&real_corr, &nns, nbar);
+    println!("Constructed GRF theory. Carrying out Bayesian inference");
+
+    // Construct likelihood function, bounds on bias parameter's uniform prior
+    let (bounds, loglikelihood) = get_bounds_and_ll(&grf);
+    
+    // Do parameter inference
+    const BURN_IN: usize = 1_000;
+    const WALKERS: usize = 8;
+    const SAMPLES: usize = 10_000;
+    const DATA_DIM: usize = 0; // the data is contained inside grf, owned by loglikelihood
+    const PARAMETERS: usize = 1;
+    let (most_likely, chain) = {
+        parameter_inference_uniform_prior::<_, DATA_DIM, PARAMETERS, WALKERS, BURN_IN, SAMPLES>(&[[]], &bounds, &loglikelihood)
+    };
+
+    // Plot likelihood
+    plot_likelihood(bounds, &loglikelihood);
+
+    // Plot most likely 1nn
+    plot_likely_1nn(&grf, most_likely, chain, &nns);
+    
+}
+
+
+fn get_1nn_quijote_measurements() -> (Vec<f64>, f64) {
+
     const NDATA: usize = 10_000;
     const QUIJOTE_BOXSIZE: [f64; 3] = [1000.0; 3];
-    const N_QUERY: usize = 40_000;
+    const N_QUERY: usize = 100_000;
     let mut npz = NpzReader::new(
         std::fs::File::open("/home/cavey/experiments/cosmology/OneBox/OneBox.npz").unwrap(),
     )
@@ -50,9 +81,12 @@ fn main() {
         nns.push(tree.query_nearest(&query).unwrap().0.sqrt());
     }
     nns.sort_by(|a, b| a.partial_cmp(&b).expect("there should be no NaNs"));
-    let nns = nns; // make immutable
-    println!("Calculated NNs. Constructing GRF Theory");
+    (nns, nbar)
+}
 
+
+fn get_correlation_function<'c>() -> Box<dyn Fn(f64) -> f64 + Send + Sync + 'c> {
+    
     // Initialize E & Hu power spectrum
     // Quijote Cosmology
     let omega_matter_0 = 0.3175;
@@ -75,13 +109,23 @@ fn main() {
     };
     let real_corr = CorrelationFunction::get_correlation_function(REDSHIFT, params).unwrap();
     let real_corr_fn = move |r| real_corr.correlation_function(r);
-    let mode = SpaceMode::RealSpace(&real_corr_fn);
+    Box::new(real_corr_fn)
+}
+fn construct_grf<'b, 'c>(real_corr_fn: &'b Box<dyn Fn(f64) -> f64 + Send + Sync + 'c>, nns: &Vec<f64>, nbar: f64) -> GaussianRandomField<'b, 'c>
+where
+    'b: 'c
+{
+    let mode = SpaceMode::RealSpace(&*real_corr_fn);
     let grf = GaussianRandomField::new(nbar, mode).with(&nns);
-    println!("Constructed GRF theory. Carrying out Bayesian inference");
+    grf
+}
 
-    // Construct likelihood function
-    let bounds = [[0.2, 10.0]];
-    let loglikelihood = |_: &[f64; 0], parameters: &[f64; 1]| -> f64 {
+fn get_bounds_and_ll<'b, 'c>(grf: &'b GaussianRandomField<'b, 'c>) -> ([[f64; 2]; 1], Box<dyn Fn(&[f64; 0], &[f64; 1]) -> f64 + Send + Sync + 'c>)
+where
+    'b: 'c
+{
+    let bounds = [[0.8, 10.0]];
+    let loglikelihood = move |_: &[f64; 0], parameters: &[f64; 1]| -> f64 {
         if parameters[0] < bounds[0][0] || parameters[0] > bounds[0][1] {
             std::f64::NEG_INFINITY
         } else {
@@ -91,17 +135,13 @@ fn main() {
                 .sum()
         }
     };
-    let most_likely = parameter_inference_uniform_prior::<_, 0, 1, 32, 1_000, 10_000>(
-        &[[]],
-        &bounds,
-        &loglikelihood,
-    );
-    println!("{:?}", most_likely);
+    (bounds, Box::new(loglikelihood))
+}
 
-    // Plot likelihood
+fn plot_likelihood(bounds: [[f64; 2]; 1], loglikelihood: &dyn Fn(&[f64; 0], &[f64; 1]) -> f64) {
     let biases: Vec<f64> = (0..100)
-        .map(|i| bounds[0][0] + i as f64 * (bounds[0][1] - bounds[0][0]) / 99.0)
-        .collect();
+    .map(|i| bounds[0][0] + i as f64 * (bounds[0][1] - bounds[0][0]) / 99.0)
+    .collect();
     let lhs: Vec<f64> = biases.iter().map(|b| loglikelihood(&[], &[*b])).collect();
     println!("{lhs:?}");
     let three_fourths = *lhs
@@ -135,12 +175,13 @@ fn main() {
         .unwrap();
 
     root.present().unwrap();
+}
 
-    // Plot most likely 1nn
+fn plot_likely_1nn(grf: &GaussianRandomField, most_likely: [f64; 1], mut chain: Vec<[f64; 1]>, nns: &Vec<f64>) {
     let cdf = grf.get_cdf(1, Some(most_likely[0]));
     let pcdf: Vec<(f64, f64)> = cdf
         .iter()
-        .zip(&nns)
+        .zip(nns)
         .map(|(c, nn)| (*nn, c.min(1.0 - c).clamp(f64::MIN_POSITIVE, 0.5)))
         .collect();
     let pcdf_measurements: Vec<(f64, f64)> = nns
@@ -184,4 +225,75 @@ fn main() {
         .unwrap();
 
     root.present().unwrap();
+
+    // Extract bounds of credible interval
+    let left_2p5 = chain.len() * 25 / 1000;
+    let right_2p5 = chain.len() * 975 / 1000;
+    chain.sort_unstable_by(|a, b| a[0].partial_cmp(&b[0]).unwrap());  // this only works for 1-parameter models. need to sort each parameter independently.
+    let left_2p5 = chain[left_2p5][0];
+    let right_2p5 = chain[right_2p5][0];
+    println!("{right_2p5}");
+    let leftmost = chain[0][0];
+    let rightmost = chain.last().unwrap()[0];
+    const BINS: usize = 100;
+    let bin_size = (rightmost-leftmost) / BINS as f64;
+
+    // // manually calculate hist...
+    // let bin_num = |x: &[f64; 1]| ((x[0] - 0.8) / (10.0 - 0.8) * 100.0) as usize;
+    // let y = chain.iter().counts_by(bin_num).into_iter().map(|(bin_num, count)| );
+    
+    let hist = plotly::Histogram::new(chain.into_iter().flatten().collect::<Vec<f64>>())
+        .x_bins(plotly::histogram::Bins::new(leftmost, rightmost, bin_size))
+        .hist_norm(plotly::histogram::HistNorm::Probability)
+        .opacity(0.5);
+
+    const MARGIN: usize = 120;
+    const FONT_SIZE: usize = 40;
+    let mut layout = plotly::Layout::new()
+        .x_axis(plotly::layout::Axis::new()
+            .title(Title::from("Halo\tBias").font(Font::new().size(FONT_SIZE)).x(0.0))
+            .grid_color(NamedColor::DarkGray))
+        .y_axis(plotly::layout::Axis::new()
+            .title(Title::from("Probability").font(Font::new().size(FONT_SIZE)).x(0.0))
+            .grid_color(NamedColor::DarkGray))
+        .margin(plotly::layout::Margin::new()
+            .top(MARGIN/2)
+            .bottom(MARGIN+5)
+            .right(MARGIN-5)
+            .left(MARGIN))
+        .font(plotly::common::Font::new().size(30));
+    layout
+        .add_shape(
+            plotly::layout::Shape::new()
+                .shape_type(plotly::layout::ShapeType::Line)
+                .y_ref("paper")
+                .x0(left_2p5)
+                .y0(0)
+                .x1(left_2p5)
+                .y1(1)
+                .line(plotly::layout::ShapeLine::new().color(plotly::NamedColor::Black).width(3.)));
+    layout
+        .add_shape(
+            plotly::layout::Shape::new()
+                .shape_type(plotly::layout::ShapeType::Line)
+                .y_ref("paper")
+                .x0(right_2p5)
+                .y0(0)
+                .x1(right_2p5)
+                .y1(1)
+                .line(plotly::layout::ShapeLine::new().color(plotly::NamedColor::Black).width(3.)));
+    layout
+        .add_shape(plotly::layout::Shape::new()
+            .shape_type(plotly::layout::ShapeType::Rect)
+            .x_ref("paper")
+            .y_ref("paper")
+            .x0(0)
+            .x1(1)
+            .y0(0)
+            .y1(1));
+
+    let mut plot = plotly::Plot::new();
+    plot.set_layout(layout);
+    plot.add_trace(hist);
+    plot.save("examples/bias_credible_interval.png", plotly::ImageFormat::PNG, 1920, 1080, 1.0);
 }
