@@ -107,10 +107,17 @@ impl CorrelationFunction {
         }
         .build())
     }
+
+    pub fn get_params<'a>(&'a self) -> &'a CorrelationFunctionParameters {
+        &self.borrow_params()
+    }
+    pub fn get_redshift<'a>(&'a self) -> f64 {
+        *self.borrow_z()
+    }
 }
 
 #[allow(unused)]
-fn check_integral(cf: &Output){
+fn check_integral(cf: &Output) {
     // TODO: check integral for convergence, perhaps just print warnings
     // println!("evaluation: {}", cf.num_function_evaluations);
 }
