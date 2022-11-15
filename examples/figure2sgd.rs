@@ -57,8 +57,8 @@ fn main() {
     let real_corr = CorrelationFunction::get_correlation_function(REDSHIFT, params).unwrap();
     let real_corr_fn = |r| real_corr.correlation_function(r);
     let mode = SpaceMode::RealSpace(&real_corr_fn);
-    let grf = GaussianRandomField::new(nbar, mode).with(&scales);
-    let cdf = grf.get_cdf(1, Some(2.0));
+    let grf = GaussianRandomField::new(mode).with(&scales);
+    let cdf = grf.get_cdf(1, nbar, Some(2.0));
     let pcdf: Vec<f64> = cdf
         .iter()
         .map(|c| c.min(1.0 - c).clamp(f64::MIN_POSITIVE, 0.5))
@@ -66,8 +66,8 @@ fn main() {
 
     // then unbiased
     let unbiased = SpaceMode::RealSpace(&real_corr_fn);
-    let unbiased_grf = GaussianRandomField::new(nbar, unbiased).with(&scales);
-    let unbiased_cdf = unbiased_grf.get_cdf(1, None);
+    let unbiased_grf = GaussianRandomField::new(unbiased).with(&scales);
+    let unbiased_cdf = unbiased_grf.get_cdf(1, nbar, None);
     let unbiased_pcdf: Vec<f64> = unbiased_cdf
         .iter()
         .map(|c| c.min(1.0 - c).clamp(f64::MIN_POSITIVE, 0.5))
@@ -78,8 +78,8 @@ fn main() {
         real_corr: &real_corr_fn,
         f: omega_matter_0.powf(5.0 / 9.0),
     };
-    let rsd_grf = GaussianRandomField::new(nbar, rsd).with(&scales);
-    let rsd_cdf = rsd_grf.get_cdf(1, Some(2.0));
+    let rsd_grf = GaussianRandomField::new(rsd).with(&scales);
+    let rsd_cdf = rsd_grf.get_cdf(1, nbar, Some(2.0));
     let rsd_pcdf: Vec<f64> = rsd_cdf
         .iter()
         .map(|c| c.min(1.0 - c).clamp(f64::MIN_POSITIVE, 0.5))
@@ -88,8 +88,8 @@ fn main() {
         real_corr: &real_corr_fn,
         f: omega_matter_0.powf(5.0 / 9.0),
     };
-    let unbiased_rsd_grf = GaussianRandomField::new(nbar, unbiased_rsd).with(&scales);
-    let unbiased_rsd_cdf = unbiased_rsd_grf.get_cdf(1, None);
+    let unbiased_rsd_grf = GaussianRandomField::new(unbiased_rsd).with(&scales);
+    let unbiased_rsd_cdf = unbiased_rsd_grf.get_cdf(1, nbar, None);
     let unbiased_rsd_pcdf: Vec<f64> = unbiased_rsd_cdf
         .iter()
         .map(|c| c.min(1.0 - c).clamp(f64::MIN_POSITIVE, 0.5))

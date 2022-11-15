@@ -46,9 +46,8 @@ fn main() {
     let real_corr = CorrelationFunction::get_correlation_function(REDSHIFT, params).unwrap();
     let real_corr_fn = |r| real_corr.correlation_function(r);
     let mode = SpaceMode::RealSpace(&real_corr_fn);
-    let grf = GaussianRandomField::new(nbar, mode)
-        .with(&scales);
-    let cdf = grf.get_cdf(1, Some(3.0));
+    let grf = GaussianRandomField::new(mode).with(&scales);
+    let cdf = grf.get_cdf(1, nbar, Some(3.0));
     let pcdf: Vec<f64> = cdf
         .iter()
         .map(|c| c.min(1.0 - c).clamp(f64::MIN_POSITIVE, 0.5))
@@ -56,9 +55,8 @@ fn main() {
 
     // then unbiased
     let unbiased = SpaceMode::RealSpace(&real_corr_fn);
-    let unbiased_grf = GaussianRandomField::new(nbar, unbiased)
-        .with(&scales);
-    let unbiased_cdf = unbiased_grf.get_cdf(1, None);
+    let unbiased_grf = GaussianRandomField::new(unbiased).with(&scales);
+    let unbiased_cdf = unbiased_grf.get_cdf(1, nbar, None);
     let unbiased_pcdf: Vec<f64> = unbiased_cdf
         .iter()
         .map(|c| c.min(1.0 - c).clamp(f64::MIN_POSITIVE, 0.5))
@@ -84,7 +82,8 @@ fn main() {
         .map(|c| c.min(1.0 - c).clamp(f64::MIN_POSITIVE, 0.5))
         .collect();
 
-    let root = BitMapBackend::new("examples/grf_vs_poisson.png", (1920 / 2, 1080)).into_drawing_area();
+    let root =
+        BitMapBackend::new("examples/grf_vs_poisson.png", (1920 / 2, 1080)).into_drawing_area();
     root.fill(&WHITE).unwrap();
     let mut chart = ChartBuilder::on(&root)
         .caption("Gaussian vs Poisson", ("sans-serif", 50).into_font())

@@ -29,7 +29,7 @@ fn main() {
     println!("Constructed GRF theory. Carrying out Bayesian inference");
 
     // Construct likelihood function, bounds on bias parameter's uniform prior
-    let (bounds, loglikelihood) = get_bounds_and_ll(&grf);
+    let (bounds, loglikelihood) = get_bounds_and_ll(&grf, nbar);
 
     // Do parameter inference
     const BURN_IN: usize = 1_000;
@@ -49,7 +49,7 @@ fn main() {
     plot_likelihood(bounds, &loglikelihood);
 
     // Plot most likely 1nn
-    plot_likely_1nn(&grf, most_likely, chain, &nns);
+    plot_likely_1nn(&grf, most_likely, nbar, chain, &nns);
 }
 
 fn get_1nn_quijote_measurements() -> (Vec<f64>, f64) {
@@ -121,12 +121,13 @@ where
     'b: 'c,
 {
     let mode = SpaceMode::RealSpace(&*real_corr_fn);
-    let grf = GaussianRandomField::new(nbar, mode).with(&nns);
+    let grf = GaussianRandomField::new(mode).with(&nns);
     grf
 }
 
 fn get_bounds_and_ll<'b, 'c>(
     grf: &'b GaussianRandomField<'b, 'c>,
+    nbar: f64,
 ) -> (
     [[f64; 2]; 1],
     Box<dyn Fn(&[f64; 0], &[f64; 1]) -> f64 + Send + Sync + 'c>,
@@ -139,7 +140,7 @@ where
         if parameters[0] < bounds[0][0] || parameters[0] > bounds[0][1] {
             std::f64::NEG_INFINITY
         } else {
-            grf.get_pdf(1, Some(parameters[0]))
+            grf.get_pdf(1, nbar, Some(parameters[0]))
                 .into_iter()
                 .map(|x| x.ln())
                 .sum()
@@ -190,10 +191,11 @@ fn plot_likelihood(bounds: [[f64; 2]; 1], loglikelihood: &dyn Fn(&[f64; 0], &[f6
 fn plot_likely_1nn(
     grf: &GaussianRandomField,
     most_likely: [f64; 1],
+    nbar: f64,
     mut chain: Vec<[f64; 1]>,
     nns: &Vec<f64>,
 ) {
-    let cdf = grf.get_cdf(1, Some(most_likely[0]));
+    let cdf = grf.get_cdf(1, nbar, Some(most_likely[0]));
     let pcdf: Vec<(f64, f64)> = cdf
         .iter()
         .zip(nns)

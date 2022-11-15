@@ -28,9 +28,6 @@ mod pdf;
 ///
 /// TODO: sample usage
 pub struct GaussianRandomField<'b, 'c> {
-    /// Average number density
-    nbar: f64,
-
     /// Specified [SpaceMode]. Either [SpaceMode::RealSpace] or [SpaceMode::RedshiftSpace]
     mode: SpaceMode<'b, 'c>,
 
@@ -56,9 +53,8 @@ pub enum SpaceMode<'borrow, 'corr> {
 
 impl<'b, 'c> GaussianRandomField<'b, 'c> {
     /// Initializes the [GaussianRandomField] struct using `Vec::new` for the underlying vectors.
-    pub fn new(nbar: f64, mode: SpaceMode<'b, 'c>) -> Self {
+    pub fn new(mode: SpaceMode<'b, 'c>) -> Self {
         GaussianRandomField {
-            nbar,
             mode,
             container: Vec::new(),
         }
@@ -221,24 +217,24 @@ impl<'b, 'c> GaussianRandomField<'b, 'c> {
         }
     }
 
-    pub fn get_cdf(&self, k: u8, b: Option<f64>) -> Vec<f64> {
+    pub fn get_cdf(&self, k: u8, nbar: f64, b: Option<f64>) -> Vec<f64> {
         self.container
             .iter()
             .enumerate()
             .map(|(_, (r, i, _))| {
-                calculate_grf_cdf(*r, self.nbar, self.map_integral(*i, b.unwrap_or(1.0)), k)
+                calculate_grf_cdf(*r, nbar, self.map_integral(*i, b.unwrap_or(1.0)), k)
             })
             .collect()
     }
 
-    pub fn get_pdf(&self, k: u8, b: Option<f64>) -> Vec<f64> {
+    pub fn get_pdf(&self, k: u8, nbar: f64, b: Option<f64>) -> Vec<f64> {
         self.container
             .iter()
             .enumerate()
             .map(|(_, (r, i, didv))| {
                 calculate_grf_pdf(
                     *r,
-                    self.nbar,
+                    nbar,
                     self.map_integral(*i, b.unwrap_or(1.0)),
                     self.map_integral(*didv, b.unwrap_or(1.0)),
                     k,
