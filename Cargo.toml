@@ -2,7 +2,7 @@
 name = "cosmology"
 authors = ["cavemanloverboy <caveycool@gmail.com>"]
 repository = "https://github.com/cavemanloverboy/cosmology"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 license = "MIT"
 keywords = ["cosmology", "physics", "astrophysics", "universe", "structure"]
