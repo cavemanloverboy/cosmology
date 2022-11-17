@@ -251,6 +251,10 @@ impl<'b, 'c> GaussianRandomField<'b, 'c> {
             }
         }
     }
+
+    pub fn get_i_didv<'a>(&'a self) -> &[(f64, TwoPointIntegral, TwoPointIntegralDerivative)] {
+        &self.container
+    }
 }
 
 #[allow(unused)]
