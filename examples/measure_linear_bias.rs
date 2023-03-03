@@ -56,10 +56,7 @@ fn get_1nn_quijote_measurements() -> (Vec<f64>, f64) {
     const NDATA: usize = 10_000;
     const QUIJOTE_BOXSIZE: [f64; 3] = [1000.0; 3];
     const N_QUERY: usize = 100_000;
-    let mut npz = NpzReader::new(
-        std::fs::File::open("/home/cavey/experiments/cosmology/OneBox/OneBox.npz").unwrap(),
-    )
-    .unwrap();
+    let mut npz = NpzReader::new(std::fs::File::open("./OneBox/OneBox.npz").unwrap()).unwrap();
     let real_data: Array2<f32> = npz.by_name("rpos.npy").unwrap();
     let real_data: Array2<f64> = real_data.map(|x| *x as f64);
 
