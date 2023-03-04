@@ -48,9 +48,9 @@ fn main() {
 }
 
 fn get_1nn_quijote_measurements() -> (Vec<f64>, f64) {
-    const NDATA: usize = 10_000;
+    const NDATA: usize = 1_000;
     const QUIJOTE_BOXSIZE: [f64; 3] = [1000.0; 3];
-    const N_QUERY: usize = 10_000;
+    const N_QUERY: usize = 1_000;
     let mut npz = NpzReader::new(std::fs::File::open("./OneBox/OneBox.npz").unwrap()).unwrap();
     let real_data: Array2<f32> = npz.by_name("rpos.npy").unwrap();
     let real_data: Array2<f64> = real_data.map(|x| *x as f64);
@@ -139,7 +139,6 @@ where
             // Construct Gaussian Random Field Theory at those scales.
             let real_corr = get_correlation_function(parameters[1]);
             let grf = construct_grf(&real_corr, &nns, nbar);
-            println!("Constructed GRF theory. Carrying out Bayesian inference");
 
             grf.get_pdf(1, nbar, Some(parameters[0]))
                 .into_iter()
@@ -362,7 +361,7 @@ fn plot_likely_1nn(most_likely: [f64; 2], nbar: f64, mut chain: Vec<[f64; 2]>, n
     plot.set_layout(layout);
     plot.add_trace(hist);
     plot.save(
-        "examples/bias_credible_interval.png",
+        "examples/bias_credible_interval2.png",
         plotly::ImageFormat::PNG,
         1920,
         1080,
