@@ -27,9 +27,9 @@ fn main() {
     let (bounds, loglikelihood) = get_bounds_and_ll(&nns, nbar);
 
     // Do parameter inference
-    const BURN_IN: usize = 1_000;
+    const BURN_IN: usize = 100;
     const WALKERS: usize = 8;
-    const SAMPLES: usize = 10_000;
+    const SAMPLES: usize = 100;
     const DATA_DIM: usize = 0; // the data is contained inside grf, owned by loglikelihood
     const PARAMETERS: usize = 2;
     let (most_likely, chain) = {
@@ -266,7 +266,7 @@ fn plot_likely_1nn(most_likely: [f64; 2], nbar: f64, mut chain: Vec<[f64; 2]>, n
     println!("{right_2p5_omega}");
     let leftmost_omega = chain[0][0];
     let rightmost_omega = chain.last().unwrap()[0];
-    let bin_size = (rightmost_omega - leftmost_omega) / BINS as f64;
+    let bin_size_omega = (rightmost_omega - leftmost_omega) / BINS as f64;
 
     // // manually calculate hist...
     // let bin_num = |x: &[f64; 1]| ((x[0] - 0.8) / (10.0 - 0.8) * 100.0) as usize;
@@ -276,18 +276,20 @@ fn plot_likely_1nn(most_likely: [f64; 2], nbar: f64, mut chain: Vec<[f64; 2]>, n
         .x_bins(plotly::histogram::Bins::new(
             leftmost_bias,
             rightmost_bias,
-            bin_size,
+            bin_size_bias,
         ))
         .hist_norm(plotly::histogram::HistNorm::Probability)
         .opacity(0.5);
+    println!("hist: {hist:?}");
     let hist2 = plotly::Histogram::new(chain.iter().map(|x| x[1]).collect::<Vec<f64>>())
         .x_bins(plotly::histogram::Bins::new(
             leftmost_omega,
             rightmost_omega,
-            bin_size,
+            bin_size_omega,
         ))
         .hist_norm(plotly::histogram::HistNorm::Probability)
         .opacity(0.5);
+    println!("hist2: {hist2:?}");
 
     const MARGIN: usize = 120;
     const FONT_SIZE: usize = 40;
@@ -361,7 +363,7 @@ fn plot_likely_1nn(most_likely: [f64; 2], nbar: f64, mut chain: Vec<[f64; 2]>, n
     plot.set_layout(layout);
     plot.add_trace(hist);
     plot.save(
-        "examples/bias_credible_interval2.png",
+        "examples/bias_credible_interval2_mini2.png",
         plotly::ImageFormat::PNG,
         1920,
         1080,
@@ -438,7 +440,7 @@ fn plot_likely_1nn(most_likely: [f64; 2], nbar: f64, mut chain: Vec<[f64; 2]>, n
     plot2.set_layout(layout);
     plot2.add_trace(hist2);
     plot2.save(
-        "examples/omega_credible_interval.png",
+        "examples/omega_credible_interval_mini2.png",
         plotly::ImageFormat::PNG,
         1920,
         1080,
