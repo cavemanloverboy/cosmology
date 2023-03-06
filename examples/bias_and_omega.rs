@@ -20,11 +20,14 @@ use rand::{seq::SliceRandom, Rng, SeedableRng};
 const REDSHIFT: f64 = 1.0;
 
 #[cfg(feature = "use-mpi")]
-use {mpi::environment::Universe, mpi::traits::Communicator, std::sync::Arc};
+use {mpi::environment::Universe, mpi::collective::CommunicatorCollectives, mpi::traits::Communicator, std::sync::Arc};
 
 #[cfg(feature = "use-mpi")]
 lazy_static::lazy_static! {
-    static ref UNIVERSE: Arc<Universe> = Arc::new(mpi::initialize().unwrap());
+    static ref UNIVERSE: Arc<Universe> = Arc::new(
+        // mpi::initialize().unwrap()
+        mpi::initialize_with_threading(mpi::Threading::Serialized).unwrap().0
+    );
 }
 
 static GRF_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(1);
@@ -44,7 +47,7 @@ fn main() {
     let (bounds, loglikelihood) = get_bounds_and_ll(&nns, nbar);
 
     // Do parameter inference
-    const BURN_IN: usize = 100;
+    const BURN_IN: usize = 100;//1_000;
     const WALKERS: usize = 8;
     const SAMPLES: usize = 100;
     const DATA_DIM: usize = 0; // the data is contained inside grf, owned by loglikelihood
@@ -93,9 +96,9 @@ fn main() {
 }
 
 fn get_1nn_quijote_measurements() -> (Vec<f64>, f64) {
-    const NDATA: usize = 100;
+    const NDATA: usize = 1_000;
     const QUIJOTE_BOXSIZE: [f64; 3] = [1000.0; 3];
-    const N_QUERY: usize = 100;
+    const N_QUERY: usize = 10_000;
     let mut npz = NpzReader::new(std::fs::File::open("./OneBox/OneBox.npz").unwrap()).unwrap();
     let real_data: Array2<f32> = npz.by_name("rpos.npy").unwrap();
     let real_data: Array2<f64> = real_data.map(|x| *x as f64);
@@ -115,12 +118,13 @@ fn get_1nn_quijote_measurements() -> (Vec<f64>, f64) {
         .unwrap()
         .with_boxsize(&QUIJOTE_BOXSIZE)
         .unwrap();
-    let mut nns: Vec<f64> = Vec::with_capacity(N_QUERY);
-    for _ in 0..N_QUERY {
+    let mut nns: Vec<f64> = Vec::with_capacity(2*N_QUERY);
+    for _ in 0..2*N_QUERY {
         let query: [f64; 3] = seeded_rng.gen::<[f64; 3]>().map(|x| x * QUIJOTE_BOXSIZE[0]);
         nns.push(tree.query_nearest(&query).unwrap().0.sqrt());
     }
     nns.sort_by(|a, b| a.partial_cmp(&b).expect("there should be no NaNs"));
+    nns.drain(..N_QUERY);
     (nns, nbar)
 }
 
@@ -182,7 +186,8 @@ fn get_bounds_and_ll<'b, 'c>(
 where
     'b: 'c,
 {
-    let bounds = [[0.8, 10.0], [0.25, 0.35]];
+    //let bounds = [[0.8, 10.0], [0.05, 0.999]];
+    let bounds = [[1.75, 3.75], [0.05, 0.999]];
     let loglikelihood = move |_: &[f64; 0], parameters: &[f64; 2]| -> f64 {
         if parameters[0] < bounds[0][0]
             || parameters[0] > bounds[0][1]
@@ -191,6 +196,9 @@ where
         {
             std::f64::NEG_INFINITY
         } else {
+
+            let start = std::time::Instant::now();
+
             let mut bias = parameters[0];
             #[allow(unused_mut)] // if using mpi
             let mut omega_matter_0 = parameters[1];
@@ -219,17 +227,19 @@ where
                 .sum();
             #[cfg(feature = "use-mpi")]
             if UNIVERSE.world().rank() == 0 {
+                UNIVERSE.world().barrier();
                 let result = grf
                     .get_pdf(1, nbar, Some(bias), UNIVERSE.clone())
                     .into_iter()
                     .map(|x| x.ln())
                     .sum();
                 let done = GRF_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                println!("finished grf #{done}, ll({bias:.2}, {omega_matter_0:.2}) = {result:.3e}");
+                println!("finished grf #{done} (in {:.2} secs), ll({bias:.2}, {omega_matter_0:.2}) = {result:.3e}", start.elapsed().as_secs());
                 result
             } else {
                 let rank = UNIVERSE.world().rank();
                 println!("rank {rank} doing grf with ({bias:.2}, {omega_matter_0:.2})");
+                UNIVERSE.world().barrier();
                 grf.get_pdf(1, nbar, Some(bias), UNIVERSE.clone());
                 f64::INFINITY
             }
@@ -285,6 +295,11 @@ fn plot_likelihood(bounds: [[f64; 2]; 2], loglikelihood: &dyn Fn(&[f64; 0], &[f6
 }
 
 fn plot_likely_1nn(most_likely: [f64; 2], nbar: f64, mut chain: Vec<[f64; 2]>, nns: &Vec<f64>) {
+    let mut chain_file = std::fs::File::create("bias_omega_chain_1e4").unwrap();
+    use std::io::Write;
+    for pair in &chain {
+        chain_file.write(format!("{} {}", pair[0], pair[1]).as_bytes()).unwrap();
+    }
     let [most_likely_b, most_likely_omega_matter_0] = most_likely;
     let most_likely_real_corr_fn = get_correlation_function(most_likely_omega_matter_0);
     let most_likely_grf = construct_grf(&most_likely_real_corr_fn, nns, nbar);
@@ -303,7 +318,7 @@ fn plot_likely_1nn(most_likely: [f64; 2], nbar: f64, mut chain: Vec<[f64; 2]>, n
         })
         .collect();
 
-    let root = SVGBackend::new("examples/most_likely_1nn.svg", (1920, 1080)).into_drawing_area();
+    let root = SVGBackend::new("examples/most_likely_1nn2.svg", (1920, 1080)).into_drawing_area();
     root.fill(&WHITE).unwrap();
     let (xmin, xmax) = nns.iter().minmax().into_option().unwrap();
     let mut chart = ChartBuilder::on(&root)
@@ -452,7 +467,7 @@ fn plot_likely_1nn(most_likely: [f64; 2], nbar: f64, mut chain: Vec<[f64; 2]>, n
     plot.set_layout(layout);
     plot.add_trace(hist);
     plot.save(
-        "examples/bias_credible_interval2_mini2.png",
+        "examples/bias_credible_interval2_2.png",
         plotly::ImageFormat::PNG,
         1920,
         1080,
@@ -529,7 +544,7 @@ fn plot_likely_1nn(most_likely: [f64; 2], nbar: f64, mut chain: Vec<[f64; 2]>, n
     plot2.set_layout(layout);
     plot2.add_trace(hist2);
     plot2.save(
-        "examples/omega_credible_interval_mini2.png",
+        "examples/omega_credible_interval_2.png",
         plotly::ImageFormat::PNG,
         1920,
         1080,

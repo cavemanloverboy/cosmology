@@ -1,4 +1,4 @@
-use hammer_and_sample::{sample, Model, Parallel};
+use hammer_and_sample::{sample, Model, Parallel, Serial};
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64;
 use std::sync::Arc;
@@ -65,7 +65,8 @@ where
         (p, rng)
     });
 
-    let (mut chain, _accepted) = sample(&data, walkers, S, &Parallel);
+    // let (mut chain, _accepted) = sample(&data, walkers, S, &Parallel);
+    let (mut chain, _accepted) = sample(&data, walkers, S, &Serial);
 
     // Remove the first burn_in samples from each walker
     println!("chain[..15] = {:?}", &chain[..15]);
