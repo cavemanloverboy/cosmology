@@ -1,6 +1,5 @@
 use ::ndarray::{Array2, Axis};
 use itertools::Itertools;
-use mpi::traits::Root;
 use ndarray_npy::NpzReader;
 use plotly::{
     common::{Font, Title},
@@ -20,7 +19,10 @@ use rand::{seq::SliceRandom, Rng, SeedableRng};
 const REDSHIFT: f64 = 1.0;
 
 #[cfg(feature = "use-mpi")]
-use {mpi::environment::Universe, mpi::collective::CommunicatorCollectives, mpi::traits::Communicator, std::sync::Arc};
+use {
+    balancer::Balancer, mpi::collective::CommunicatorCollectives, mpi::environment::Universe,
+    mpi::traits::Communicator, std::sync::Arc,
+};
 
 #[cfg(feature = "use-mpi")]
 lazy_static::lazy_static! {
@@ -37,19 +39,29 @@ fn main() {
     let (nns, nbar) = get_1nn_quijote_measurements();
     println!("Calculated NNs. Constructing GRF Theory");
     #[cfg(feature = "use-mpi")]
-    println!(
-        "rank {} got nbar {nbar:.3e} and nns {:?}",
-        UNIVERSE.world().rank(),
-        &nns[..5]
-    );
+    let nns = {
+        println!(
+            "rank {} got nbar {nbar:.3e} and nns {:?}",
+            UNIVERSE.world().rank(),
+            &nns[..5]
+        );
+        let balancer = balancer::Balancer::<u8>::new(UNIVERSE.clone(), false);
+        let our_subset = balancer.get_subset(&nns).to_vec();
+        println!(
+            "rank {} got nbar {nbar:.3e} and subset {:?}",
+            UNIVERSE.world().rank(),
+            &our_subset[..5]
+        );
+        our_subset
+    };
 
     // Construct likelihood function, bounds on bias parameter's uniform prior
     let (bounds, loglikelihood) = get_bounds_and_ll(&nns, nbar);
 
     // Do parameter inference
-    const BURN_IN: usize = 100;//1_000;
+    const BURN_IN: usize = 1;
     const WALKERS: usize = 8;
-    const SAMPLES: usize = 100;
+    const SAMPLES: usize = 4;
     const DATA_DIM: usize = 0; // the data is contained inside grf, owned by loglikelihood
     const PARAMETERS: usize = 2;
 
@@ -83,22 +95,23 @@ fn main() {
                 >(&[[]], &bounds, &loglikelihood)
             };
             // Plot likelihood
-            plot_likelihood(bounds, &loglikelihood);
+            // plot_likelihood(bounds, &loglikelihood);
 
             // Plot most likely 1nn
             plot_likely_1nn(most_likely, nbar, chain, &nns);
         } else {
             for _ in 0..WALKERS * (BURN_IN + SAMPLES) {
-                loglikelihood(&[], &[1.0, 0.3]);
+                loglikelihood(&[], &[2.5, 0.3]);
             }
         }
+        UNIVERSE.world().barrier();
     }
 }
 
 fn get_1nn_quijote_measurements() -> (Vec<f64>, f64) {
     const NDATA: usize = 1_000;
     const QUIJOTE_BOXSIZE: [f64; 3] = [1000.0; 3];
-    const N_QUERY: usize = 10_000;
+    const N_QUERY: usize = 10;
     let mut npz = NpzReader::new(std::fs::File::open("./OneBox/OneBox.npz").unwrap()).unwrap();
     let real_data: Array2<f32> = npz.by_name("rpos.npy").unwrap();
     let real_data: Array2<f64> = real_data.map(|x| *x as f64);
@@ -118,8 +131,8 @@ fn get_1nn_quijote_measurements() -> (Vec<f64>, f64) {
         .unwrap()
         .with_boxsize(&QUIJOTE_BOXSIZE)
         .unwrap();
-    let mut nns: Vec<f64> = Vec::with_capacity(2*N_QUERY);
-    for _ in 0..2*N_QUERY {
+    let mut nns: Vec<f64> = Vec::with_capacity(2 * N_QUERY);
+    for _ in 0..2 * N_QUERY {
         let query: [f64; 3] = seeded_rng.gen::<[f64; 3]>().map(|x| x * QUIJOTE_BOXSIZE[0]);
         nns.push(tree.query_nearest(&query).unwrap().0.sqrt());
     }
@@ -162,16 +175,7 @@ where
     'b: 'c,
 {
     let mode = SpaceMode::RealSpace(&*real_corr_fn);
-    #[cfg(not(feature = "use-mpi"))]
     let grf = GaussianRandomField::new(mode).with(&nns);
-    #[cfg(feature = "use-mpi")]
-    let grf = {
-        if UNIVERSE.world().rank() == 0 {
-            GaussianRandomField::new(mode).with(Some(nns.to_vec()), UNIVERSE.clone())
-        } else {
-            GaussianRandomField::new(mode).with(None, UNIVERSE.clone())
-        }
-    };
 
     grf
 }
@@ -189,59 +193,60 @@ where
     //let bounds = [[0.8, 10.0], [0.05, 0.999]];
     let bounds = [[1.75, 3.75], [0.05, 0.999]];
     let loglikelihood = move |_: &[f64; 0], parameters: &[f64; 2]| -> f64 {
-        if parameters[0] < bounds[0][0]
-            || parameters[0] > bounds[0][1]
-            || parameters[1] < bounds[1][0]
-            || parameters[1] > bounds[1][1]
+        #[cfg(feature = "use-mpi")]
+        let balancer: Balancer<f64> = Balancer::new(UNIVERSE.clone(), false);
+        #[allow(unused_mut)] // if using mpi
+        let mut bias = parameters[0];
+        #[allow(unused_mut)] // if using mpi
+        let mut omega_matter_0 = parameters[1];
+
+        // Syncrhonize across all things, prior to checking for bounds!
+        #[cfg(feature = "use-mpi")]
+        {
+            balancer.synchronize_value(&mut omega_matter_0);
+            balancer.synchronize_value(&mut bias);
+        }
+
+        if bias < bounds[0][0]
+            || bias > bounds[0][1]
+            || omega_matter_0 < bounds[1][0]
+            || omega_matter_0 > bounds[1][1]
         {
             std::f64::NEG_INFINITY
         } else {
-
             let start = std::time::Instant::now();
-
-            let mut bias = parameters[0];
-            #[allow(unused_mut)] // if using mpi
-            let mut omega_matter_0 = parameters[1];
-
-            // Syncrhonize across all things
-            #[cfg(feature = "use-mpi")]
-            UNIVERSE
-                .world()
-                .process_at_rank(0)
-                .broadcast_into(&mut omega_matter_0);
-            #[cfg(feature = "use-mpi")]
-            UNIVERSE
-                .world()
-                .process_at_rank(0)
-                .broadcast_into(&mut bias);
 
             // Construct Gaussian Random Field Theory at those scales.
             let real_corr = get_correlation_function(omega_matter_0);
             let grf = construct_grf(&real_corr, &nns, nbar);
 
-            #[cfg(not(feature = "use-mpi"))]
-            return grf
-                .get_pdf(1, nbar, Some(parameters[0]))
+            let local_result: f64 = grf
+                .get_pdf(1, nbar, Some(bias))
                 .into_iter()
                 .map(|x| x.ln())
                 .sum();
+            #[cfg(not(feature = "use-mpi"))]
+            return local_result;
+
             #[cfg(feature = "use-mpi")]
-            if UNIVERSE.world().rank() == 0 {
-                UNIVERSE.world().barrier();
-                let result = grf
-                    .get_pdf(1, nbar, Some(bias), UNIVERSE.clone())
-                    .into_iter()
-                    .map(|x| x.ln())
-                    .sum();
-                let done = GRF_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                println!("finished grf #{done} (in {:.2} secs), ll({bias:.2}, {omega_matter_0:.2}) = {result:.3e}", start.elapsed().as_secs());
-                result
-            } else {
-                let rank = UNIVERSE.world().rank();
-                println!("rank {rank} doing grf with ({bias:.2}, {omega_matter_0:.2})");
-                UNIVERSE.world().barrier();
-                grf.get_pdf(1, nbar, Some(bias), UNIVERSE.clone());
-                f64::INFINITY
+            {
+                let mut global_result = 0.0;
+                balancer.world().all_reduce_into(
+                    &local_result,
+                    &mut global_result,
+                    mpi::collective::SystemOperation::sum(),
+                );
+                // println!(
+                //     "rank {}: [{bias:.3}, {omega_matter_0:.3}]: local {local_result}, global {global_result}",
+                //     balancer.rank
+                // );
+                // if balancer.rank == 0 {
+                println!(
+                        "finished grf #{} (in {:.2} secs), ll({bias:.2}, {omega_matter_0:.2}) = {global_result:.3e}",
+                        GRF_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), start.elapsed().as_secs_f32()
+                    );
+                // }
+                global_result
             }
         }
     };
@@ -298,12 +303,14 @@ fn plot_likely_1nn(most_likely: [f64; 2], nbar: f64, mut chain: Vec<[f64; 2]>, n
     let mut chain_file = std::fs::File::create("bias_omega_chain_1e4").unwrap();
     use std::io::Write;
     for pair in &chain {
-        chain_file.write(format!("{} {}", pair[0], pair[1]).as_bytes()).unwrap();
+        chain_file
+            .write(format!("{} {}\n", pair[0], pair[1]).as_bytes())
+            .unwrap();
     }
     let [most_likely_b, most_likely_omega_matter_0] = most_likely;
     let most_likely_real_corr_fn = get_correlation_function(most_likely_omega_matter_0);
     let most_likely_grf = construct_grf(&most_likely_real_corr_fn, nns, nbar);
-    let cdf = most_likely_grf.get_cdf(1, nbar, Some(most_likely[0]));
+    let cdf = most_likely_grf.get_cdf(1, nbar, Some(most_likely_b));
     let pcdf: Vec<(f64, f64)> = cdf
         .iter()
         .zip(nns)
@@ -368,8 +375,8 @@ fn plot_likely_1nn(most_likely: [f64; 2], nbar: f64, mut chain: Vec<[f64; 2]>, n
     let left_2p5_omega = chain[left_2p5][1];
     let right_2p5_omega = chain[right_2p5][1];
     println!("{right_2p5_omega}");
-    let leftmost_omega = chain[0][0];
-    let rightmost_omega = chain.last().unwrap()[0];
+    let leftmost_omega = chain[0][1];
+    let rightmost_omega = chain.last().unwrap()[1];
     let bin_size_omega = (rightmost_omega - leftmost_omega) / BINS as f64;
 
     // // manually calculate hist...

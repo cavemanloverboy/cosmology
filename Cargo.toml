@@ -18,7 +18,7 @@ lto = "fat"
 default = ["bayesian", "nn", "use-mpi"]
 bayesian = ["hammer-and-sample", "rand", "rand_pcg"]
 nn = []
-use-mpi = ["mpi", "balancer", "lazy_static"]
+use-mpi = []
 colossus-python = ["pyo3"]
 
 [dependencies]
@@ -29,9 +29,6 @@ rand_pcg = { version = "0.3.1", optional = true }
 ouroboros = "0.15.3"
 rayon = "1.7.0"
 indicatif = "0.17.0"
-balancer = { git = "https://github.com/cavemanloverboy/balancer.git", version = "0.1.0", optional = true }
-mpi = { version = "0.6.0", optional = true, features = ["derive"] }
-lazy_static = { version = "1.4.0", optional = true }
 rand_chacha = "0.3.1"
 
 # Optional testing dependency!
@@ -54,6 +51,9 @@ rand_distr = "0.4.3"
 assert_approx_eq = "1.1.0"
 plotly = {version = "0.7.0", features = ["kaleido"] }
 criterion = "0.4.0"
+balancer = { git = "https://github.com/cavemanloverboy/balancer.git"}
+mpi = { version = "0.6.0"}
+lazy_static = { version = "1.4.0"}
 
 
 [[bench]]
