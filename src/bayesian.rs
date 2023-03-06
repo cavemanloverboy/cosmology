@@ -3,11 +3,12 @@ use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64;
 use std::sync::Arc;
 
-type LogLikelihood<'b,const D: usize, const P: usize> = dyn Fn(&[f64; D], &[f64; P]) -> f64 + Send + Sync + 'b;
+type LogLikelihood<'b, const D: usize, const P: usize> =
+    dyn Fn(&[f64; D], &[f64; P]) -> f64 + Send + Sync + 'b;
 struct Data<'a, 'b, const D: usize, const P: usize> {
     data: &'a [[f64; D]],
     // bounds: Option<(f64, f64)>,
-    loglikelihood: Arc<LogLikelihood<'b,D,P>>,
+    loglikelihood: Arc<LogLikelihood<'b, D, P>>,
 }
 
 impl<const D: usize, const K: usize> Model for Data<'_, '_, D, K> {
@@ -69,21 +70,19 @@ where
     let (mut chain, _accepted) = sample(&data, walkers, S, &Serial);
 
     // Remove the first burn_in samples from each walker
-    println!("chain[..15] = {:?}", &chain[..15]);
-    println!(
-        "chain[-15..] = {:?}",
-        &chain.iter().rev().take(15).rev().collect::<Vec<_>>()
-    );
     let chain: Vec<[f64; P]> = chain.drain(W * B..).collect();
 
     let norm = chain.len() as f64;
-    (chain
-        .iter()
-        .fold([0.0; P], |mut acc, p| {
-            acc.iter_mut().enumerate().for_each(|(i, a)| *a += p[i]);
-            acc
-        })
-        .map(|p| p / norm), chain)
+    (
+        chain
+            .iter()
+            .fold([0.0; P], |mut acc, p| {
+                acc.iter_mut().enumerate().for_each(|(i, a)| *a += p[i]);
+                acc
+            })
+            .map(|p| p / norm),
+        chain,
+    )
 }
 
 #[test]
