@@ -3,9 +3,6 @@ use std::f64::consts::PI;
 use quadrature::Output;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
-#[cfg(feature = "use-mpi")]
-use {balancer::Balancer, mpi::environment::Universe, mpi::traits::Equivalence, std::sync::Arc};
-
 use self::{cdf::calculate_grf_cdf, pdf::calculate_grf_pdf};
 
 // Very low to invoke max num of integrator iterations
@@ -43,11 +40,6 @@ type TwoPointIntegralDerivative = TwoPointIntegral;
 
 type Radius = f64;
 
-#[derive(Equivalence)]
-#[repr(transparent)]
-#[cfg(feature = "use-mpi")]
-struct Triplet((f64, f64, f64));
-
 /// Specify what space to calculate the kNN CDFs for,
 /// either [SpaceMode::RealSpace] or [SpaceMode::RedshiftSpace].
 pub enum SpaceMode<'borrow, 'corr> {
@@ -81,43 +73,40 @@ impl<'b, 'c> GaussianRandomField<'b, 'c> {
     //     }
     // }
 
+    // /// Initializes the [GaussianRandomField] struct and passes in the specified capacity
+    // /// to the underlying vectors for better, preemtive allocations.
+    // #[cfg(feature = "use-mpi")]
+    // pub fn with(mut self, rs: Option<Vec<f64>>, universe: Arc<Universe>) -> Self {
+    //     // Initialize balancer
+    //     let balancer: Balancer<Triplet> = Balancer::new(universe, false);
+    //     let work = |r: &f64| Triplet((*r, self.calculate_i(*r), self.calculate_didv(*r)));
+    //     if balancer.rank == 0 {
+    //         let ours = balancer.distribute(Some(rs.unwrap())).unwrap();
+    //         balancer.work(&ours, work);
+    //         let output = balancer.collect().unwrap();
+    //         // SAFETY: The triplet is a #[repr(transparent)] on the target type
+    //         self.container =
+    //             unsafe { std::mem::transmute::<Vec<Triplet>, Vec<(f64, f64, f64)>>(output) };
+    //     } else {
+    //         // Receive our work
+    //         let ours: Vec<f64> = balancer.distribute(None).unwrap();
+    //         // Do our work
+    //         balancer.work(&ours, work);
+    //         // Send back
+    //         balancer.collect();
+    //     }
+
+    //     self
+    // }
+
     /// Initializes the [GaussianRandomField] struct and passes in the specified capacity
     /// to the underlying vectors for better, preemtive allocations.
-    #[cfg(feature = "use-mpi")]
-    pub fn with(mut self, rs: Option<Vec<f64>>, universe: Arc<Universe>) -> Self {
-        // Initialize balancer
-        let balancer: Balancer<Triplet> = Balancer::new(universe, false);
-        let work = |r: &f64| Triplet((*r, self.calculate_i(*r), self.calculate_didv(*r)));
-        if balancer.rank == 0 {
-            let ours = balancer.distribute(Some(rs.unwrap())).unwrap();
-            balancer.work(&ours, work);
-            let output = balancer.collect().unwrap();
-            // SAFETY: The triplet is a #[repr(transparent)] on the target type
-            self.container =
-                unsafe { std::mem::transmute::<Vec<Triplet>, Vec<(f64, f64, f64)>>(output) };
-        } else {
-            // Receive our work
-            let ours: Vec<f64> = balancer.distribute(None).unwrap();
-            // Do our work
-            balancer.work(&ours, work);
-            // Send back
-            balancer.collect();
-        }
-
-        self
-    }
-
-    /// Initializes the [GaussianRandomField] struct and passes in the specified capacity
-    /// to the underlying vectors for better, preemtive allocations.
-    #[cfg(not(feature = "use-mpi"))]
+    // #[cfg(not(feature = "use-mpi"))]
     pub fn with(mut self, rs: &[f64]) -> Self {
         use rayon::prelude::IntoParallelIterator;
 
-        let bar = indicatif::ProgressBar::new(rs.len() as u64);
-
         self.container = rs
             .into_par_iter()
-            .inspect(|_| bar.inc(1))
             .map(|r| (*r, self.calculate_i(*r), self.calculate_didv(*r)))
             .collect();
 
@@ -263,7 +252,7 @@ impl<'b, 'c> GaussianRandomField<'b, 'c> {
             .collect()
     }
 
-    #[cfg(not(feature = "use-mpi"))]
+    // #[cfg(not(feature = "use-mpi"))]
     pub fn get_pdf(&self, k: u8, nbar: f64, b: Option<f64>) -> Vec<f64> {
         self.container
             .par_iter()
@@ -278,52 +267,53 @@ impl<'b, 'c> GaussianRandomField<'b, 'c> {
             })
             .collect()
     }
-    #[cfg(feature = "use-mpi")]
-    pub fn get_pdf(&self, k: u8, nbar: f64, b: Option<f64>, universe: Arc<Universe>) -> Vec<f64> {
-        // Initialize balancer
 
-        let balancer = Balancer::new(universe, false);
-        let b = b.unwrap_or(1.0);
+    // #[cfg(feature = "use-mpi")]
+    // pub fn get_pdf(&self, k: u8, nbar: f64, b: Option<f64>, universe: Arc<Universe>) -> Vec<f64> {
+    //     // Initialize balancer
 
-        let work = |(r, i, didv): &(f64, f64, f64)| {
-            calculate_grf_pdf(
-                *r,
-                nbar,
-                self.map_integral(*i, b),
-                self.map_integral(*didv, b),
-                k,
-            )
-        };
-        if balancer.rank == 0 {
-            // SAFETY: The triplet is a #[repr(transparent)] on the target type
-            // NOTE: unnecessary clone but lets go with it...
-            let distribute: Vec<Triplet> = unsafe {
-                std::mem::transmute::<Vec<(f64, f64, f64)>, Vec<Triplet>>(self.container.clone())
-            };
-            let ours: Vec<(f64, f64, f64)> = unsafe {
-                std::mem::transmute::<Vec<Triplet>, Vec<(f64, f64, f64)>>(
-                    balancer.distribute(Some(distribute)).unwrap(),
-                )
-            };
-            // Do our work
-            balancer.work(&ours, work);
-            // Collect all work
-            let output = balancer.collect().unwrap();
-            return output;
-        } else {
-            // Receive our work
-            let ours: Vec<(f64, f64, f64)> = unsafe {
-                std::mem::transmute::<Vec<Triplet>, Vec<(f64, f64, f64)>>(
-                    balancer.distribute(None).unwrap(),
-                )
-            };
-            // Do our work
-            balancer.work(&ours, work);
-            // Send back
-            balancer.collect();
-            return vec![];
-        }
-    }
+    //     let balancer = Balancer::new(universe, false);
+    //     let b = b.unwrap_or(1.0);
+
+    //     let work = |(r, i, didv): &(f64, f64, f64)| {
+    //         calculate_grf_pdf(
+    //             *r,
+    //             nbar,
+    //             self.map_integral(*i, b),
+    //             self.map_integral(*didv, b),
+    //             k,
+    //         )
+    //     };
+    //     if balancer.rank == 0 {
+    //         // SAFETY: The triplet is a #[repr(transparent)] on the target type
+    //         // NOTE: unnecessary clone but lets go with it...
+    //         let distribute: Vec<Triplet> = unsafe {
+    //             std::mem::transmute::<Vec<(f64, f64, f64)>, Vec<Triplet>>(self.container.clone())
+    //         };
+    //         let ours: Vec<(f64, f64, f64)> = unsafe {
+    //             std::mem::transmute::<Vec<Triplet>, Vec<(f64, f64, f64)>>(
+    //                 balancer.distribute(Some(distribute)).unwrap(),
+    //             )
+    //         };
+    //         // Do our work
+    //         balancer.work(&ours, work);
+    //         // Collect all work
+    //         let output = balancer.collect().unwrap();
+    //         return output;
+    //     } else {
+    //         // Receive our work
+    //         let ours: Vec<(f64, f64, f64)> = unsafe {
+    //             std::mem::transmute::<Vec<Triplet>, Vec<(f64, f64, f64)>>(
+    //                 balancer.distribute(None).unwrap(),
+    //             )
+    //         };
+    //         // Do our work
+    //         balancer.work(&ours, work);
+    //         // Send back
+    //         balancer.collect();
+    //         return vec![];
+    //     }
+    // }
 
     fn map_integral(&self, i: f64, b: f64) -> f64 {
         match &self.mode {
